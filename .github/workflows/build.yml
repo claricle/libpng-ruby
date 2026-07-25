@@ -80,7 +80,7 @@ jobs:
           - os: windows-latest
             platform: x64-mingw-ucrt
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
-          - os: macos-13
+          - os: macos-latest
             platform: x86_64-darwin
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
           - os: macos-latest

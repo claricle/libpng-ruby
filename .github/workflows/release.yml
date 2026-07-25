@@ -138,7 +138,7 @@ jobs:
           - os: windows-latest
             platform: x64-mingw-ucrt
             ruby-version: '3.3'
-          - os: macos-13
+          - os: macos-latest
             platform: x86_64-darwin
             ruby-version: '3.3'
           - os: macos-latest
