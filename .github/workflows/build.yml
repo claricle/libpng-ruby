@@ -71,7 +71,7 @@ jobs:
           - os: ubuntu-latest
             platform: x86_64-linux
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             platform: aarch64-linux
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
           - os: windows-latest
@@ -79,6 +79,9 @@ jobs:
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
           - os: windows-latest
             platform: x64-mingw-ucrt
+            ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
+          - os: windows-11-arm
+            platform: aarch64-mingw-ucrt
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
           - os: macos-15-intel
             platform: x86_64-darwin
@@ -97,38 +100,10 @@ jobs:
         bundler-cache: true
 
     - name: Install build tools (Linux)
-      if: startsWith(matrix.os, 'ubuntu') && matrix.platform != 'aarch64-linux'
+      if: startsWith(matrix.os, 'ubuntu')
       run: |
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build zlib1g-dev
-
-    - name: Install build tools (Linux cross aarch64)
-      if: startsWith(matrix.os, 'ubuntu') && matrix.platform == 'aarch64-linux'
-      run: |
-        # Ubuntu 24.04 noble's default apt sources (archive.ubuntu.com) don't
-        # carry arm64 packages. Restrict existing sources to amd64 and add
-        # ports.ubuntu.com for arm64.
-        sudo dpkg --add-architecture arm64
-        sudo sed -i '/^Types: deb$/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
-        sudo tee /etc/apt/sources.list.d/ubuntu-ports-arm64.sources >/dev/null <<'EOF'
-        Types: deb
-        Architectures: arm64
-        URIs: http://ports.ubuntu.com/ubuntu-ports/
-        Suites: noble noble-updates noble-backports
-        Components: main universe restricted multiverse
-        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-
-        Types: deb
-        Architectures: arm64
-        URIs: http://ports.ubuntu.com/ubuntu-ports/
-        Suites: noble-security
-        Components: main universe restricted multiverse
-        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-        EOF
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build \
-          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-          zlib1g-dev:arm64
 
     - name: Install build tools (macOS)
       if: startsWith(matrix.os, 'macos')
@@ -138,6 +113,8 @@ jobs:
     - name: Install build tools (Windows)
       if: startsWith(matrix.os, 'windows')
       uses: step-security/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.platform == 'aarch64-mingw-ucrt' && 'arm64' || 'x64' }}
 
     - run: bundle exec rake gem:native:${{ matrix.platform }}
 
@@ -150,7 +127,54 @@ jobs:
       run: gem install -b pkg/libpng-*.gem
 
     - name: Test conversion
-      if: matrix.platform != 'aarch64-linux'
       shell: bash
+      run: |
+        ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
+
+  build_musl:
+    name: build ${{ matrix.platform }} (Alpine)
+    runs-on: ${{ matrix.os }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: x86_64-linux-musl
+          - os: ubuntu-24.04-arm
+            platform: aarch64-linux-musl
+
+    container:
+      image: ruby:${{ needs.prepare.outputs.default-ruby-version }}-alpine
+      env:
+        BUNDLE_PATH: /tmp/bundle
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install build tools (Alpine)
+      shell: sh
+      run: |
+        apk add --no-cache build-base cmake ninja git file zlib-dev
+
+    - name: Bundle install
+      shell: sh
+      run: bundle install --jobs 4
+
+    - name: Build gem
+      shell: sh
+      run: bundle exec rake gem:native:${{ matrix.platform }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: pkg-${{ matrix.platform }}
+        path: pkg/*.gem
+
+    - name: Install gem
+      shell: sh
+      run: gem install -b pkg/libpng-*.gem
+
+    - name: Test conversion
+      shell: sh
       run: |
         ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect'

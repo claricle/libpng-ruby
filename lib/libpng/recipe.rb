@@ -147,9 +147,15 @@ module Libpng
         case @host
         when /\Ax86_64.*mingw32/
           'x64-mingw32'
+        when /\A(aarch64|arm64).*mingw/
+          'aarch64-mingw-ucrt'
+        when /\Ax86_64.*linux-musl/
+          'x86_64-linux-musl'
+        when /\A(aarch64|arm64).*linux-musl/
+          'aarch64-linux-musl'
         when /\Ax86_64.*linux/
           'x86_64-linux'
-        when /\A(arm64|aarch64).*linux/
+        when /\A(aarch64|arm64).*linux/
           'aarch64-linux'
         when /\Ax86_64.*(darwin|macos|osx)/
           'x86_64-darwin'
@@ -167,8 +173,12 @@ module Libpng
           'arm64-darwin'
         when /\Ax86_64.*(darwin|macos|osx)/
           'x86_64-darwin'
+        when /\A(arm64|aarch64).*linux-musl/
+          'aarch64-linux-musl'
         when /\A(arm64|aarch64).*linux/
           'aarch64-linux'
+        when /\Ax86_64.*linux-musl/
+          'x86_64-linux-musl'
         else
           ENV.fetch('target_platform', host_platform)
         end
@@ -179,26 +189,18 @@ module Libpng
     end
 
     # Configure MiniPortile + CMake for cross-compilation. Native builds
-    # (host_platform == target_platform) skip this entirely. CMake's
-    # CMAKE_SYSTEM_PROCESSOR is wired through `cpu_type` below because
-    # MiniPortileCMake hardcodes it to RbConfig::CONFIG['target_cpu'],
-    # which is the *build* host's CPU, not the target's.
+    # (host_platform == target_platform) skip this entirely.
     def setup_cross_compile
-      case target_platform
-      when 'aarch64-linux'
-        @host = 'aarch64-linux'
-        ENV['CC']     ||= 'aarch64-linux-gnu-gcc'
-        ENV['CXX']    ||= 'aarch64-linux-gnu-g++'
-        ENV['AR']     ||= 'aarch64-linux-gnu-ar'
-        ENV['RANLIB'] ||= 'aarch64-linux-gnu-ranlib'
-        ENV['STRIP']  ||= 'aarch64-linux-gnu-strip'
-      end
+      # All targeted platforms now have native runners (ubuntu-24.04-arm for
+      # aarch64-linux, windows-11-arm for aarch64-mingw-ucrt, Alpine containers
+      # for the musl variants). This hook is kept as a seam for future
+      # cross-compile targets (e.g. aarch64-linux on an x86_64 host).
     end
 
     def cpu_type
       case target_platform
-      when 'aarch64-linux', 'arm64-darwin' then 'aarch64'
-      when 'x86_64-linux', 'x86_64-darwin', /\Ax64-mingw/ then 'x86_64'
+      when 'aarch64-linux', 'aarch64-linux-musl', 'arm64-darwin', 'aarch64-mingw-ucrt' then 'aarch64'
+      when 'x86_64-linux', 'x86_64-linux-musl', 'x86_64-darwin', /\Ax64-mingw/ then 'x86_64'
       else
         super
       end
@@ -206,9 +208,9 @@ module Libpng
 
     def cmake_system_name
       case target_platform
-      when 'aarch64-linux', 'x86_64-linux' then 'Linux'
+      when 'aarch64-linux', 'x86_64-linux', 'aarch64-linux-musl', 'x86_64-linux-musl' then 'Linux'
       when 'arm64-darwin', 'x86_64-darwin' then 'Darwin'
-      when /\Ax64-mingw/ then 'Windows'
+      when /\A(aarch64-)?mingw/, /\Ax64-mingw/ then 'Windows'
       else
         super
       end
@@ -221,10 +223,12 @@ module Libpng
           /Mach-O 64-bit dynamically linked shared library arm64/
         when 'x86_64-darwin'
           /Mach-O 64-bit dynamically linked shared library x86_64/
-        when 'aarch64-linux'
+        when 'aarch64-linux', 'aarch64-linux-musl'
           /ELF 64-bit LSB shared object, ARM aarch64/
-        when 'x86_64-linux'
+        when 'x86_64-linux', 'x86_64-linux-musl'
           /ELF 64-bit LSB shared object, x86-64/
+        when 'aarch64-mingw-ucrt'
+          /PE32\+ executable.*\(DLL\).*ARM64/
         when /\Ax64-mingw(32|-ucrt)/
           /PE32\+ executable.*\(DLL\).*x86-64/
         else
