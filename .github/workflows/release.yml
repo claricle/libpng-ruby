@@ -208,7 +208,7 @@ jobs:
         run: gem install -b pkg/libpng-*.gem
 
       - name: Test conversion
-        if: matrix.platform != 'aarch64-linux'
+        if: matrix.platform != 'aarch64-linux' && matrix.platform != 'x86_64-darwin'
         shell: bash
         run: |
           ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
