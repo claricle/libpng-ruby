@@ -18,7 +18,7 @@ module Libpng
     LIBPNG_URL = "https://downloads.sourceforge.net/project/libpng/libpng16/#{Libpng::LIBPNG_VERSION}/libpng-#{Libpng::LIBPNG_VERSION}.tar.gz".freeze
     # sha256 of the libpng-X.Y.Z.tar.gz tarball. Verify with:
     #   curl -sL <URL> | shasum -a 256
-    LIBPNG_SHA256 = '68f3d83a79d81dfcb0a439d62b411aa257bb4973d7c67cd1ff8bdf8d011538cd'.freeze
+    LIBPNG_SHA256 = '8c9b05b675ca7301a458df2c2e46f26e1d41ff36b8863f8c33530bc58c2e6225'.freeze
 
     ROOT = Pathname.new(File.expand_path('../..', __dir__))
 
