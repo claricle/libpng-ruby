@@ -259,5 +259,23 @@ jobs:
         uses: rubygems/configure-rubygems-credentials@main
 
       - name: Publish to rubygems.org
+        shell: bash
         run: |
-          for gem in pkg/*.gem; do gem push -V "$gem"; done
+          set +e
+          for gem in pkg/*.gem; do
+            output=$(gem push -V "$gem" 2>&1)
+            rc=$?
+            if [ $rc -eq 0 ]; then
+              echo "$output"
+              continue
+            fi
+            # RubyGems rejects re-pushing the same version with 422, even for
+            # identical content. Tolerate that so we can publish newly-added
+            # platform variants at a version whose source gem already exists.
+            if echo "$output" | grep -qE "already (exists|pushed)|Conflict|Repushing"; then
+              echo "Skip $(basename "$gem") (already published)"
+              continue
+            fi
+            echo "$output" >&2
+            exit 1
+          done
