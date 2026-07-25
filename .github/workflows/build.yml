@@ -80,7 +80,7 @@ jobs:
           - os: windows-latest
             platform: x64-mingw-ucrt
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
-          - os: macos-latest
+          - os: macos-15-intel
             platform: x86_64-darwin
             ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
           - os: macos-latest
@@ -150,7 +150,7 @@ jobs:
       run: gem install -b pkg/libpng-*.gem
 
     - name: Test conversion
-      if: matrix.platform != 'aarch64-linux' && matrix.platform != 'x86_64-darwin'
+      if: matrix.platform != 'aarch64-linux'
       shell: bash
       run: |
         ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect'

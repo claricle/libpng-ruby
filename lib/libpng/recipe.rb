@@ -65,10 +65,6 @@ module Libpng
       # macOS: avoid the .framework build; we want a plain .dylib.
       opts << '-DCMAKE_INSTALL_LIBDIR=lib'
       opts << '-DCMAKE_BUILD_TYPE=Release'
-      # macOS arch cross-compile (e.g. x86_64-darwin on an Apple Silicon host):
-      # clang supports this natively via -arch; CMAKE_OSX_ARCHITECTURES wires it
-      # through CMake's compiler detection.
-      opts << "-DCMAKE_OSX_ARCHITECTURES=#{ENV['CMAKE_OSX_ARCHITECTURES']}" if ENV['CMAKE_OSX_ARCHITECTURES']
       opts
     end
 
@@ -196,14 +192,6 @@ module Libpng
         ENV['AR']     ||= 'aarch64-linux-gnu-ar'
         ENV['RANLIB'] ||= 'aarch64-linux-gnu-ranlib'
         ENV['STRIP']  ||= 'aarch64-linux-gnu-strip'
-      when 'x86_64-darwin'
-        # Apple Silicon host building for Intel. clang's -arch handles this;
-        # CMAKE_OSX_ARCHITECTURES propagates it. Avoids depending on the
-        # heavily-constrained macos-13 (Intel) runner pool.
-        ENV['CMAKE_OSX_ARCHITECTURES'] = 'x86_64'
-      when 'arm64-darwin'
-        # Intel host building for Apple Silicon (legacy fallback).
-        ENV['CMAKE_OSX_ARCHITECTURES'] = 'arm64'
       end
     end
 
