@@ -22,9 +22,33 @@ Or install manually:
 
   gem install libpng
 
-The gem downloads a pre-compiled binary for your platform automatically.
-No C compiler, libpng development headers, or system packages are needed
-at install time.
+RubyGems automatically selects the pre-compiled gem that matches your
+platform. No C compiler, libpng development headers, or system packages
+are required at install time when a binary gem is available. The
+platform-agnostic `ruby` gem is the fallback: it downloads the libpng
+source tarball at install time and compiles it via CMake (requires
+`cmake`, `ninja`, and zlib headers).
+
+== Supported platforms
+
+The following pre-compiled platform gems are published for each release
+(see the link:https://rubygems.org/gems/libpng/versions[RubyGems versions page]
+for the current set):
+
+[cols="1,1,3", options="header"]
+|===
+| Gem platform | Target | Build host
+| `ruby` (source) | Any platform (compiles on install) | n/a
+| `x86_64-linux` | x86_64 Linux (glibc) | `ubuntu-latest`
+| `x86_64-linux-musl` | x86_64 Linux (musl, e.g. Alpine) | `ruby:<ver>-alpine` on x86_64
+| `aarch64-linux` | ARM64 Linux (glibc) | `ubuntu-24.04-arm` (native)
+| `aarch64-linux-musl` | ARM64 Linux (musl) | `ruby:<ver>-alpine` on arm64
+| `x64-mingw32` | x64 Windows, RubyInstaller < 3.0 (MSVCRT) | `windows-latest`
+| `x64-mingw-ucrt` | x64 Windows, RubyInstaller >= 3.0 (UCRT) | `windows-latest`
+| `aarch64-mingw-ucrt` | ARM64 Windows (Ruby >= 3.4) | `windows-11-arm` (native)
+| `x86_64-darwin` | Intel macOS | `macos-15-intel`
+| `arm64-darwin` | Apple Silicon macOS | `macos-latest`
+|===
 
 == Usage
 
@@ -52,11 +76,18 @@ at install time.
 
   Libpng.encode(width, height, pixels,
                 pixel_format: "RGBA",
-                convert_to_8bit: false)
+                convert_to_8bit: false,
+                strip_colorspace: true)
 
-`convert_to_8bit: true` causes libpng to convert 16-bit input to 8-bit
+`convert_to_8bit: true`:: causes libpng to convert 16-bit input to 8-bit
 on write (input is still passed as a packed byte buffer; use this if you
 have packed 16-bit-per-channel data).
+
+`strip_colorspace: true`:: (default) walks the PNG chunk list after
+encode and keeps only `IHDR`, `IDAT`, and `IEND`, dropping the sRGB/gAMA
+chunks libpng's simplified API emits by default. This matches the
+"classic" libpng write path (e.g. libemf2svg) and produces byte-identical
+output. Set to `false` to keep the ancillary color chunks.
 
 == Ractor safety
 
@@ -77,13 +108,13 @@ Example:
 This gem follows a `{LIBPNG_VERSION}.{ITERATION}` scheme:
 
 - `LIBPNG_VERSION` is the upstream libpng release the gem is built
-  against (currently 1.6.48).
+  against (currently `1.6.58`).
 - `ITERATION` is a counter that bumps on Ruby-side changes (recipe bug
   fixes, CI tweaks, doc updates). It resets to 0 each time
   `LIBPNG_VERSION` bumps.
 
-For example, `1.6.48.0` is the first release against libpng 1.6.48,
-`1.6.48.1` is a Ruby-side fix, and `1.6.49.0` would be a release against
+For example, `1.6.58.0` is the first release against libpng 1.6.58,
+`1.6.58.1` is a Ruby-side fix, and `1.6.59.0` would be a release against
 the next upstream libpng.
 
 == How it works
@@ -91,15 +122,54 @@ the next upstream libpng.
 The gem has three layers:
 
 1. `lib/libpng.rb` -- Ruby FFI wrapper. Loads `libpng16.{so,dylib,dll}`
-   from the gem's `lib/libpng/` directory at runtime.
-2. `lib/libpng/recipe.rb` -- a MiniPortileCMake recipe that downloads
-   the libpng source tarball and runs CMake to produce the shared
-   library. This is invoked by `ext/extconf.rb` when the gem is installed
-   from source.
-3. `Rakefile` defines `gem:native:<platform>` tasks that pre-compile
-   the gem for each target platform. The pre-compiled gems bundle the
-   `.so`/`.dylib`/`.dll` and disable `extconf.rb`, so installation
-   requires no C compiler.
+   from the gem's `lib/libpng/` directory at runtime and exposes
+   `Libpng.encode` / `Libpng.decode` against libpng's "simplified"
+   high-level C API (`png_image_*`). The wrapper manually lays out the
+   `png_image` struct via explicit byte offsets into an
+   `FFI::MemoryPointer` rather than `FFI::Struct`, because `FFI::Struct`
+   carries class-level state that is not shareable across non-main
+   Ractors.
+
+2. `lib/libpng/recipe.rb` -- a `MiniPortileCMake` recipe that downloads
+   the libpng source tarball pinned by `LIBPNG_URL` / `LIBPNG_SHA256`,
+   runs CMake with `PNG_SHARED=ON PNG_STATIC=OFF PNG_TESTS=OFF`, and
+   copies the resulting shared lib into `lib/libpng/`. Invoked only when
+   installing the **source** (`ruby` platform) gem.
+
+3. `ext/extconf.rb` -- gem extension entry point. Calls `Recipe#cook_if_not`,
+   which is a no-op once the per-platform checkpoint file
+   (`ports/.../<name>-<ver>-<platform>.installed`) exists. After cooking,
+   emits a dummy `Makefile` via `mkmf` so RubyGems is satisfied (no Ruby
+   C extension is compiled). The pre-compiled platform gems unset
+   `spec.extensions`, so this never runs for them.
+
+=== Pre-compiled platform gems
+
+`Rakefile` defines `gem:native:<platform>` tasks for each target. Each
+task clones the gemspec, sets `spec.platform`, adds
+`lib/libpng/*.{dll,so,dylib}` to `spec.files`, removes the
+`mini_portile2` dependency (no longer needed at install time), and
+unsets `spec.extensions` -- the resulting gem installs with no compiler.
+
+The release workflow (`.github/workflows/release.yml`) builds all 10
+platforms in parallel on the appropriate native runner:
+
+- x86_64 Linux glibc -- `ubuntu-latest`
+- ARM64 Linux glibc -- `ubuntu-24.04-arm` (native)
+- x86_64 Linux musl -- `ruby:<ver>-alpine` via `docker run` on `ubuntu-latest`
+- ARM64 Linux musl -- `ruby:<ver>-alpine` via `docker run` on `ubuntu-24.04-arm`
+- x64 Windows (both MSVCRT and UCRT) -- `windows-latest` with `step-security/msvc-dev-cmd`
+- ARM64 Windows -- `windows-11-arm` (native) with `arch: arm64`
+- Intel macOS -- `macos-15-intel`
+- Apple Silicon macOS -- `macos-latest`
+
+Linux glibc and macOS builds run natively on the matching runner. Linux
+musl builds run inside `ruby:<ver>-alpine` containers via `docker run`
+rather than the workflow `container:` field, because Actions' JS runtime
+has no arm64-musl build and therefore cannot run Alpine containers on
+arm64 runners. Windows builds use the Visual Studio toolchain via
+`step-security/msvc-dev-cmd` (a maintained drop-in for the deleted
+`ilammy/msvc-dev-tools`).
 
 == License
 
