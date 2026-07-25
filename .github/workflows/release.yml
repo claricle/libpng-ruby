@@ -140,7 +140,7 @@ jobs:
             ruby-version: '3.3'
           - os: windows-11-arm
             platform: aarch64-mingw-ucrt
-            ruby-version: '3.3'
+            ruby-version: '3.4'
           - os: macos-15-intel
             platform: x86_64-darwin
             ruby-version: '3.3'
@@ -201,41 +201,37 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
-    container:
-      image: ruby:3.3-alpine
-      env:
-        BUNDLE_PATH: /tmp/bundle
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.bump.outputs.sha || github.ref }}
 
-      - name: Install build tools (Alpine)
-        shell: sh
+      - name: Build in Alpine container
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
+          cat > /tmp/alpine-build.sh <<'BUILD_EOF'
+          set -e
           apk add --no-cache build-base cmake ninja git file zlib-dev
-
-      - name: Bundle install
-        shell: sh
-        run: bundle install --jobs 4
-
-      - name: Build gem
-        shell: sh
-        run: bundle exec rake gem:native:${{ matrix.platform }}
+          bundle install --jobs 4
+          bundle exec rake "gem:native:${PLATFORM}"
+          gem install -b pkg/libpng-*.gem
+          ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
+          BUILD_EOF
+          chmod +x /tmp/alpine-build.sh
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v /tmp/alpine-build.sh:/alpine-build.sh \
+            -w /work \
+            -e PLATFORM \
+            ruby:3.3-alpine \
+            /alpine-build.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.platform }}
           path: pkg/*.gem
-
-      - name: Install gem
-        shell: sh
-        run: gem install -b pkg/libpng-*.gem
-
-      - name: Test conversion
-        shell: sh
-        run: |
-          ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
 
   publish:
     needs: [ bump, build, build_musl ]
