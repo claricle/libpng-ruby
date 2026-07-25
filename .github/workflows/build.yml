@@ -164,7 +164,9 @@ jobs:
         bundle install --jobs 4
         bundle exec rake "gem:native:${PLATFORM}"
         gem install -b pkg/libpng-*.gem
-        ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
+        # Run the smoke test from /tmp so bundler's source-tree LOAD_PATH
+        # doesn't shadow the installed gem.
+        (cd /tmp && ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
         BUILD_EOF
         chmod +x /tmp/alpine-build.sh
         docker run --rm \

@@ -218,7 +218,7 @@ jobs:
           bundle install --jobs 4
           bundle exec rake "gem:native:${PLATFORM}"
           gem install -b pkg/libpng-*.gem
-          ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect'
+          (cd /tmp && ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
           BUILD_EOF
           chmod +x /tmp/alpine-build.sh
           docker run --rm \
