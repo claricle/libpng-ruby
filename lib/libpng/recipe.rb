@@ -32,6 +32,7 @@ module Libpng
 
       @target = ROOT.join(@target).to_s
       @printed = {}
+      setup_cross_compile if cross_compile?
     end
 
     # libpng ships a CMake build alongside the autotools one. We use CMake
@@ -137,7 +138,7 @@ module Libpng
         when /\Ax86_64.*linux/
           'x86_64-linux'
         when /\A(arm64|aarch64).*linux/
-          'arm64-linux'
+          'aarch64-linux'
         when /\Ax86_64.*(darwin|macos|osx)/
           'x86_64-darwin'
         when /\A(arm64|aarch64).*(darwin|macos|osx)/
@@ -159,6 +160,46 @@ module Libpng
         else
           ENV.fetch('target_platform', host_platform)
         end
+    end
+
+    def cross_compile?
+      target_platform != host_platform
+    end
+
+    # Configure MiniPortile + CMake for cross-compilation. Native builds
+    # (host_platform == target_platform) skip this entirely. CMake's
+    # CMAKE_SYSTEM_PROCESSOR is wired through `cpu_type` below because
+    # MiniPortileCMake hardcodes it to RbConfig::CONFIG['target_cpu'],
+    # which is the *build* host's CPU, not the target's.
+    def setup_cross_compile
+      case target_platform
+      when 'aarch64-linux'
+        @host = 'aarch64-linux'
+        ENV['CC']     ||= 'aarch64-linux-gnu-gcc'
+        ENV['CXX']    ||= 'aarch64-linux-gnu-g++'
+        ENV['AR']     ||= 'aarch64-linux-gnu-ar'
+        ENV['RANLIB'] ||= 'aarch64-linux-gnu-ranlib'
+        ENV['STRIP']  ||= 'aarch64-linux-gnu-strip'
+      end
+    end
+
+    def cpu_type
+      case target_platform
+      when 'aarch64-linux', 'arm64-darwin' then 'aarch64'
+      when 'x86_64-linux', 'x86_64-darwin', /\Ax64-mingw/ then 'x86_64'
+      else
+        super
+      end
+    end
+
+    def cmake_system_name
+      case target_platform
+      when 'aarch64-linux', 'x86_64-linux' then 'Linux'
+      when 'arm64-darwin', 'x86_64-darwin' then 'Darwin'
+      when /\Ax64-mingw/ then 'Windows'
+      else
+        super
+      end
     end
 
     def target_format
