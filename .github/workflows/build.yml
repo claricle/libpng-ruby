@@ -164,9 +164,11 @@ jobs:
         bundle install --jobs 4
         bundle exec rake "gem:native:${PLATFORM}"
         gem install -b pkg/libpng-*.gem
-        # Run the smoke test from /tmp so bundler's source-tree LOAD_PATH
-        # doesn't shadow the installed gem.
-        (cd /tmp && ruby -rlibpng -e 'png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+        # Smoke test from /tmp so bundler's source-tree LOAD_PATH doesn't
+        # shadow the installed gem. Activate via `gem` so RubyGems resolves
+        # the platform-specific binary gem (Alpine Ruby's platform string
+        # is *-linux-musl, which must match the gem's platform suffix).
+        (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
         BUILD_EOF
         chmod +x /tmp/alpine-build.sh
         docker run --rm \
