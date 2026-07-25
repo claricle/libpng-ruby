@@ -212,6 +212,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           cat > /tmp/alpine-build.sh <<'BUILD_EOF'
+          #!/bin/sh
           set -e
           apk add --no-cache build-base cmake ninja git file zlib-dev
           bundle install --jobs 4
