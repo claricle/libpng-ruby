@@ -161,6 +161,11 @@ jobs:
         #!/bin/sh
         set -e
         apk add --no-cache build-base cmake ninja git file zlib-dev
+        # The mounted /work volume is owned by the host runner user; git in
+        # the container (running as root) refuses to operate on it without
+        # this. Without it, `git ls-files` in the gemspec returns empty and
+        # the built gem is missing lib/libpng.rb.
+        git config --global --add safe.directory /work
         bundle install --jobs 4
         bundle exec rake "gem:native:${PLATFORM}"
         gem install -b pkg/libpng-*.gem

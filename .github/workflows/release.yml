@@ -215,6 +215,7 @@ jobs:
           #!/bin/sh
           set -e
           apk add --no-cache build-base cmake ninja git file zlib-dev
+          git config --global --add safe.directory /work
           bundle install --jobs 4
           bundle exec rake "gem:native:${PLATFORM}"
           gem install -b pkg/libpng-*.gem
