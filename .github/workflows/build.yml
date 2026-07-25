@@ -105,7 +105,26 @@ jobs:
     - name: Install build tools (Linux cross aarch64)
       if: startsWith(matrix.os, 'ubuntu') && matrix.platform == 'aarch64-linux'
       run: |
+        # Ubuntu 24.04 noble's default apt sources (archive.ubuntu.com) don't
+        # carry arm64 packages. Restrict existing sources to amd64 and add
+        # ports.ubuntu.com for arm64.
         sudo dpkg --add-architecture arm64
+        sudo sed -i '/^Types: deb$/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+        sudo tee /etc/apt/sources.list.d/ubuntu-ports-arm64.sources >/dev/null <<'EOF'
+        Types: deb
+        Architectures: arm64
+        URIs: http://ports.ubuntu.com/ubuntu-ports/
+        Suites: noble noble-updates noble-backports
+        Components: main universe restricted multiverse
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+        Types: deb
+        Architectures: arm64
+        URIs: http://ports.ubuntu.com/ubuntu-ports/
+        Suites: noble-security
+        Components: main universe restricted multiverse
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+        EOF
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build \
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \

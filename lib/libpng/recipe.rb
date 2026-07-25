@@ -70,10 +70,12 @@ module Libpng
 
     def install
       super
-      # After `make install`, the .so/.dylib/.dll is under ports/<name>/<ver>/lib/.
-      # Copy it into the gem's lib/libpng/ so FFI can load it at runtime.
-      libs = Dir.glob(File.join(port_path, 'lib', shared_lib_glob))
-      raise "no libpng shared lib produced at #{port_path}/lib" if libs.empty?
+      # After `make install`, the shared lib lives under ports/<name>/<ver>/.
+      # On Linux/macOS that's lib/. On Windows, CMake's GNUInstallDirs puts
+      # the .dll in bin/ and the import library (.dll.a) in lib/ — we only
+      # ship the .dll, so search both.
+      libs = Dir.glob(File.join(port_path, shared_lib_install_glob))
+      raise "no libpng shared lib produced under #{port_path}" if libs.empty?
 
       target_dir = ROOT.join('lib', 'libpng')
       FileUtils.mkdir_p(target_dir)
@@ -123,6 +125,16 @@ module Libpng
         'libpng16*.dylib'
       else
         'libpng16.so*'
+      end
+    end
+
+    # Glob (with port_path prefix) for the freshly installed shared lib.
+    # On Windows the .dll installs to bin/; on Unix-likes it stays in lib/.
+    def shared_lib_install_glob
+      if MiniPortile.windows?
+        '{bin,lib}/libpng16*.dll'
+      else
+        "lib/#{shared_lib_glob}"
       end
     end
 
