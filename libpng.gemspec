@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
                        'libpng16 shared library is pre-compiled for ' \
                        'each target platform and shipped inside the ' \
                        'gem, so no C compiler is required at install time.'
-  spec.homepage      = 'https://github.com/claricle/libpng'
+  spec.homepage      = 'https://github.com/claricle/libpng-ruby'
   spec.license       = 'BSD-2-Clause'
   spec.required_ruby_version = '>= 2.7.0'
 
