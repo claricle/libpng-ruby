@@ -32,6 +32,7 @@ module Libpng
 
       @target = ROOT.join(@target).to_s
       @printed = {}
+      setup_cross_compile if cross_compile?
     end
 
     # libpng ships a CMake build alongside the autotools one. We use CMake
@@ -69,10 +70,12 @@ module Libpng
 
     def install
       super
-      # After `make install`, the .so/.dylib/.dll is under ports/<name>/<ver>/lib/.
-      # Copy it into the gem's lib/libpng/ so FFI can load it at runtime.
-      libs = Dir.glob(File.join(port_path, 'lib', shared_lib_glob))
-      raise "no libpng shared lib produced at #{port_path}/lib" if libs.empty?
+      # After `make install`, the shared lib lives under ports/<name>/<ver>/.
+      # On Linux/macOS that's lib/. On Windows, CMake's GNUInstallDirs puts
+      # the .dll in bin/ and the import library (.dll.a) in lib/ — we only
+      # ship the .dll, so search both.
+      libs = Dir.glob(File.join(port_path, shared_lib_install_glob))
+      raise "no libpng shared lib produced under #{port_path}" if libs.empty?
 
       target_dir = ROOT.join('lib', 'libpng')
       FileUtils.mkdir_p(target_dir)
@@ -125,6 +128,16 @@ module Libpng
       end
     end
 
+    # Glob (with port_path prefix) for the freshly installed shared lib.
+    # On Windows the .dll installs to bin/; on Unix-likes it stays in lib/.
+    def shared_lib_install_glob
+      if MiniPortile.windows?
+        '{bin,lib}/libpng16*.dll'
+      else
+        "lib/#{shared_lib_glob}"
+      end
+    end
+
     def each_built_lib(&block)
       Dir.glob(ROOT.join('lib', 'libpng', shared_lib_glob)).each(&block)
     end
@@ -137,7 +150,7 @@ module Libpng
         when /\Ax86_64.*linux/
           'x86_64-linux'
         when /\A(arm64|aarch64).*linux/
-          'arm64-linux'
+          'aarch64-linux'
         when /\Ax86_64.*(darwin|macos|osx)/
           'x86_64-darwin'
         when /\A(arm64|aarch64).*(darwin|macos|osx)/
@@ -159,6 +172,46 @@ module Libpng
         else
           ENV.fetch('target_platform', host_platform)
         end
+    end
+
+    def cross_compile?
+      target_platform != host_platform
+    end
+
+    # Configure MiniPortile + CMake for cross-compilation. Native builds
+    # (host_platform == target_platform) skip this entirely. CMake's
+    # CMAKE_SYSTEM_PROCESSOR is wired through `cpu_type` below because
+    # MiniPortileCMake hardcodes it to RbConfig::CONFIG['target_cpu'],
+    # which is the *build* host's CPU, not the target's.
+    def setup_cross_compile
+      case target_platform
+      when 'aarch64-linux'
+        @host = 'aarch64-linux'
+        ENV['CC']     ||= 'aarch64-linux-gnu-gcc'
+        ENV['CXX']    ||= 'aarch64-linux-gnu-g++'
+        ENV['AR']     ||= 'aarch64-linux-gnu-ar'
+        ENV['RANLIB'] ||= 'aarch64-linux-gnu-ranlib'
+        ENV['STRIP']  ||= 'aarch64-linux-gnu-strip'
+      end
+    end
+
+    def cpu_type
+      case target_platform
+      when 'aarch64-linux', 'arm64-darwin' then 'aarch64'
+      when 'x86_64-linux', 'x86_64-darwin', /\Ax64-mingw/ then 'x86_64'
+      else
+        super
+      end
+    end
+
+    def cmake_system_name
+      case target_platform
+      when 'aarch64-linux', 'x86_64-linux' then 'Linux'
+      when 'arm64-darwin', 'x86_64-darwin' then 'Darwin'
+      when /\Ax64-mingw/ then 'Windows'
+      else
+        super
+      end
     end
 
     def target_format
