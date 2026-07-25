@@ -1,0 +1,108 @@
+= libpng: pre-compiled libpng for Ruby
+
+image:https://img.shields.io/badge/Ruby-%3E%3D%202.7.0-ruby.svg[Ruby]
+image:https://img.shields.io/badge/license-BSD--2--Clause-blue.svg[License]
+
+`libpng` is a Ruby binding for the official PNG reference library
+(https://github.com/pnggroup/libpng[libpng]). The native shared library
+is pre-compiled for each target platform and shipped inside the gem, so
+`gem install libpng` Just Works without a C compiler on the host.
+
+== Installation
+
+Add to your Gemfile:
+
+  gem "libpng"
+
+Then:
+
+  bundle install
+
+Or install manually:
+
+  gem install libpng
+
+The gem downloads a pre-compiled binary for your platform automatically.
+No C compiler, libpng development headers, or system packages are needed
+at install time.
+
+== Usage
+
+  require "libpng"
+
+  # Encode raw RGBA pixels (row-major, top-down) as a PNG.
+  png = Libpng.encode(width, height, rgba_bytes, pixel_format: "RGBA")
+  File.binwrite("out.png", png)
+
+  # Decode a PNG into raw pixels.
+  decoded = Libpng.decode(File.binread("out.png"), pixel_format: "RGBA")
+  decoded.width   # => Integer
+  decoded.height  # => Integer
+  decoded.format  # => "RGBA"
+  decoded.pixels  # => binary String of RGBA bytes
+
+=== Supported pixel formats
+
+- `"GRAY"` / `"GRAYSCALE"` -- 8-bit grayscale (1 byte/pixel)
+- `"GA"` / `"AG"` -- 8-bit grayscale + alpha (2 bytes/pixel)
+- `"RGB"`, `"BGR"` -- 8-bit truecolor (3 bytes/pixel)
+- `"RGBA"`, `"ARGB"`, `"BGRA"`, `"ABGR"` -- 8-bit truecolor + alpha (4 bytes/pixel)
+
+=== Encoding options
+
+  Libpng.encode(width, height, pixels,
+                pixel_format: "RGBA",
+                convert_to_8bit: false)
+
+`convert_to_8bit: true` causes libpng to convert 16-bit input to 8-bit
+on write (input is still passed as a packed byte buffer; use this if you
+have packed 16-bit-per-channel data).
+
+== Ractor safety
+
+`Libpng.encode` and `Libpng.decode` are Ractor-safe. Every call
+allocates and frees its own libpng `png_image`; no shared mutable state
+exists on the Ruby side. Calls from multiple Ractors run concurrently
+without locking.
+
+Example:
+
+  r = Ractor.new do
+    Libpng.encode(2, 2, "\xFF" * 16, pixel_format: "RGBA")
+  end
+  r.take  # => PNG binary
+
+== Versioning
+
+This gem follows a `{LIBPNG_VERSION}.{ITERATION}` scheme:
+
+- `LIBPNG_VERSION` is the upstream libpng release the gem is built
+  against (currently 1.6.48).
+- `ITERATION` is a counter that bumps on Ruby-side changes (recipe bug
+  fixes, CI tweaks, doc updates). It resets to 0 each time
+  `LIBPNG_VERSION` bumps.
+
+For example, `1.6.48.0` is the first release against libpng 1.6.48,
+`1.6.48.1` is a Ruby-side fix, and `1.6.49.0` would be a release against
+the next upstream libpng.
+
+== How it works
+
+The gem has three layers:
+
+1. `lib/libpng.rb` -- Ruby FFI wrapper. Loads `libpng16.{so,dylib,dll}`
+   from the gem's `lib/libpng/` directory at runtime.
+2. `lib/libpng/recipe.rb` -- a MiniPortileCMake recipe that downloads
+   the libpng source tarball and runs CMake to produce the shared
+   library. This is invoked by `ext/extconf.rb` when the gem is installed
+   from source.
+3. `Rakefile` defines `gem:native:<platform>` tasks that pre-compile
+   the gem for each target platform. The pre-compiled gems bundle the
+   `.so`/`.dylib`/`.dll` and disable `extconf.rb`, so installation
+   requires no C compiler.
+
+== License
+
+BSD-2-Clause; see link:LICENSE.txt[LICENSE.txt]. The gem bundles
+pre-compiled libpng binaries; libpng itself is distributed under the
+https://github.com/pnggroup/libpng/blob/main/LICENSE[libpng license].

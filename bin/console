@@ -1,0 +1,5 @@
+#!/bin/sh
+# frozen_string_literal: true
+
+# Console entry point for the libpng gem.
+exec ruby -Ilib -rlibpng -e 'puts "Libpng #{Libpng::VERSION} loaded"; binding.irb' "$@"

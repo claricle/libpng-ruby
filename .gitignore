@@ -1,0 +1,17 @@
+/.bundle/
+/.yardoc
+/Gemfile.lock
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+/ports/
+/lib/libpng/*.so
+/lib/libpng/*.so.*
+/lib/libpng/*.dylib
+/lib/libpng/*.dll
+/.idea/
+/.vscode/
+*.gem

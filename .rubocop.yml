@@ -1,0 +1,39 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 2.7
+  SuggestExtensions: false
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# The wrapper is by nature a single file with FFI declarations + several
+# methods that walk libpng's chunked API; splitting would obscure the
+# 1-to-1 mapping with the C API.
+Metrics/AbcSize:
+  Max: 60
+Metrics/ClassLength:
+  Max: 200
+Metrics/CyclomaticComplexity:
+  Max: 20
+Metrics/MethodLength:
+  Max: 50
+Metrics/ModuleLength:
+  Max: 250
+Metrics/PerceivedComplexity:
+  Max: 20
+Metrics/ParameterLists:
+  Max: 7
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*.rb
+    - Rakefile
+    - libpng.gemspec
+
+Style/SpecialGlobalVars:
+  Exclude:
+    - ext/extconf.rb
+Style/FrozenStringLiteralComment:
+  Exclude:
+    - ext/extconf.rb
+    - lib/libpng/recipe.rb

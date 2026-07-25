@@ -1,0 +1,249 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump-type:
+        description: 'What to bump before tagging'
+        type: choice
+        options:
+          - current
+          - iteration
+          - libpng
+        default: iteration
+      libpng-version:
+        description: 'New libpng version (required when bump-type=libpng, e.g. 1.6.49)'
+        type: string
+        required: false
+
+# contents: write is needed for workflow_dispatch to push the bump commit + tag.
+# id-token: write is required for RubyGems.org Trusted Publishing (OIDC).
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  bump:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      new-version: ${{ steps.bump.outputs.new-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: '3.3'
+
+      - name: Bump version.rb
+        id: bump
+        shell: bash
+        env:
+          BUMP_TYPE: ${{ inputs.bump-type }}
+          LIBPNG_VERSION_INPUT: ${{ inputs.libpng-version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BUMP_TYPE" == "current" ]]; then
+            NEW_VERSION=$(ruby -Ilib -rlibpng/version -e 'puts Libpng::VERSION')
+            echo "new-version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "Releasing current VERSION (${NEW_VERSION}) -- no bump."
+            exit 0
+          fi
+
+          ruby <<'RUBY'
+            bump_type = ENV.fetch("BUMP_TYPE")
+            path = "lib/libpng/version.rb"
+            content = File.read(path)
+
+            case bump_type
+            when "iteration"
+              m = %r{LIBPNG_RUBY_ITERATION = (\d+)}.match(content) or
+                raise "Could not find LIBPNG_RUBY_ITERATION in #{path}"
+              content.sub!(%r{LIBPNG_RUBY_ITERATION = \d+},
+                           "LIBPNG_RUBY_ITERATION = #{m[1].to_i + 1}") or
+                raise "Failed to substitute iteration"
+            when "libpng"
+              new_v = ENV.fetch("LIBPNG_VERSION_INPUT", "")
+              raise "libpng-version input is required when bump-type=libpng" if new_v.empty?
+              raise "Invalid version format: #{new_v} (expected X.Y.Z)" unless new_v.match?(/\A\d+\.\d+\.\d+\z/)
+              content.sub!(%r{LIBPNG_VERSION = "[^"]+"},
+                           "LIBPNG_VERSION = \"#{new_v}\"") or
+                raise "Failed to substitute libpng version"
+              content.sub!(%r{LIBPNG_RUBY_ITERATION = \d+},
+                           "LIBPNG_RUBY_ITERATION = 0") or
+                raise "Failed to reset iteration"
+            else
+              raise "Unknown bump-type: #{bump_type}"
+            end
+
+            File.write(path, content)
+            load File.expand_path(path)
+            File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |f|
+              f.puts "new-version=#{Libpng::VERSION}"
+            end
+            warn "Bumped to #{Libpng::VERSION}"
+          RUBY
+
+          NEW_VERSION=$(ruby -Ilib -rlibpng/version -e 'puts Libpng::VERSION')
+          echo "new-version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/libpng/version.rb
+          git commit -m "Release v${NEW_VERSION}"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Show what's being released
+        run: |
+          echo "Releasing version: ${{ steps.bump.outputs.new-version }}"
+          git --no-pager log --oneline -1 "${{ steps.bump.outputs.sha }}"
+
+      - name: Push bump commit + tag
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new-version }}
+          SHA: ${{ steps.bump.outputs.sha }}
+        run: |
+          if [[ -n "${SHA}" && "${SHA}" != "${{ github.sha }}" ]]; then
+            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          fi
+          git tag "v${NEW_VERSION}" "${SHA}"
+          git push origin "v${NEW_VERSION}"
+
+  build:
+    needs: bump
+    if: always() && !cancelled() && !failure() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: any
+            ruby-version: '3.3'
+          - os: ubuntu-latest
+            platform: x86_64-linux
+            ruby-version: '3.3'
+          - os: windows-latest
+            platform: x64-mingw32
+            ruby-version: '3.3'
+          - os: windows-latest
+            platform: x64-mingw-ucrt
+            ruby-version: '3.3'
+          - os: macos-latest
+            platform: x86_64-darwin
+            ruby-version: '3.3'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+      - name: Install build tools (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build zlib1g-dev
+
+      - name: Install build tools (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew install cmake ninja
+
+      - name: Install build tools (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: ilammy/msvc-dev-tools@v1
+
+      - run: bundle exec rake gem:native:${{ matrix.platform }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}
+          path: pkg/*.gem
+
+      - name: Install gem
+        run: gem install -b pkg/libpng-*.gem
+
+      - name: Test conversion
+        run: |
+          ruby -rlibpng -e "png = Libpng.encode(2, 2, \"\\xff\" * 16, pixel_format: 'RGBA'); puts Libpng.decode(png, pixel_format: 'RGBA').inspect"
+
+  cross:
+    needs: bump
+    if: always() && !cancelled() && !failure() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: aarch64-linux
+            ruby-version: '3.3'
+          - os: macos-latest
+            platform: arm64-darwin
+            ruby-version: '3.3'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+
+      - name: Install Ubuntu cross-build packages
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu cmake ninja-build zlib1g-dev:arm64
+
+      - name: Install macOS build packages
+        if: startsWith(matrix.os, 'macos')
+        run: brew install cmake ninja
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+      - run: bundle exec rake gem:native:${{ matrix.platform }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}
+          path: pkg/*.gem
+
+      - name: Install gem
+        run: gem install -b pkg/libpng-*.gem
+
+  publish:
+    needs: [ bump, build, cross ]
+    if: always() && !cancelled() && !failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: pkg
+          merge-multiple: true
+
+      - name: Configure RubyGems credentials (Trusted Publishing / OIDC)
+        uses: rubygems/configure-rubygems-credentials@main
+
+      - name: Publish to rubygems.org
+        run: |
+          for gem in pkg/*.gem; do gem push -V "$gem"; done
