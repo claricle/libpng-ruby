@@ -11,6 +11,6 @@ module Libpng
   # new libpng release. The iteration resets to 0 each time
   # LIBPNG_VERSION bumps.
   LIBPNG_VERSION = '1.6.58'
-  LIBPNG_RUBY_ITERATION = 0
+  LIBPNG_RUBY_ITERATION = 1
   VERSION = "#{LIBPNG_VERSION}.#{LIBPNG_RUBY_ITERATION}"
 end
