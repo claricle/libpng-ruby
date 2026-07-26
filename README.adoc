@@ -71,6 +71,7 @@ for the current set):
   decoded.interlace   # => 0 (PNG_INTERLACE_NONE, from IHDR)
   decoded.text        # => {"Title" => "Sunset", "Author" => "Jane"} (tEXt/zTXt/iTXt)
   decoded.color       # => {:gamma => 0.45455, :srgb_intent => 0, ...} (gAMA/cHRM/sRGB/iCCP)
+  decoded.phys        # => {:pixels_per_unit_x => 3779, :unit => 1, :dpi_x => 95.99, ...} (pHYs)
 
 === Supported pixel formats
 
@@ -109,7 +110,14 @@ by `libemf2svg`'s `rgb2png` -- use `encode_standard` instead of
                          compression_level: 6,
                          interlace: :none,
                          bit_depth: 8,
-                         palette: nil)
+                         palette: nil,
+                         # Metadata writers (each optional):
+                         text: { "Title" => "Sunset", "Author" => "Jane" },
+                         gamma: 0.45455,
+                         srgb_intent: 0,
+                         chromaticities: { white_point_x: 0.3127, ... },
+                         icc_profile: { name: "sRGB IEC61966-2.1", data: bytes },
+                         phys: { pixels_per_unit_x: 3779, pixels_per_unit_y: 3779, unit: 1 })
 
 `pixel_format`:: `:gray`, `:ga`, `:rgb`, `:rgba`, or `:palette`. The
 byte-order variants (`BGR`, `ARGB`, `BGRA`, `ABGR`) are simplified-API
@@ -148,12 +156,29 @@ Differences from `encode`:
   `ensure` block calls `png_destroy_write_struct` to release the C
   state.
 
+=== Standard API (decode_standard)
+
+`Libpng.decode_standard` is the read-side counterpart to
+`encode_standard`. It calls `png_create_read_struct` +
+`png_set_read_fn` (memory reader) + `png_read_info` + transforms +
+`png_read_image`, giving the caller explicit control over which
+transforms apply (palette-to-RGB, gray-to-RGB, alpha add/strip,
+16-to-8 demotion, interlace handling).
+
+  decoded = Libpng.decode_standard(png_bytes, pixel_format: "RGBA", bit_depth: 8)
+
+Returns the same `Libpng::DecodedImage` shape as `decode`, so metadata
+fields (`text`, `color`, `phys`) work uniformly across both decode
+paths. Use `decode` for the common case (auto-transforms); use
+`decode_standard` when you need to know exactly which transforms
+applied (e.g. for parity with `libemf2svg`'s `png2rgb`).
+
 == Ractor safety
 
-`Libpng.encode` and `Libpng.decode` are Ractor-safe. Every call
-allocates and frees its own libpng `png_image`; no shared mutable state
-exists on the Ruby side. Calls from multiple Ractors run concurrently
-without locking.
+`Libpng.encode`, `Libpng.encode_standard`, `Libpng.decode`, and
+`Libpng.decode_standard` are all Ractor-safe. Every call allocates and
+frees its own libpng state; no shared mutable state exists on the Ruby
+side. Calls from multiple Ractors run concurrently without locking.
 
 Example (Ruby 3.x uses `Ractor#take`; Ruby 4.0+ uses `Ractor#value`):
 

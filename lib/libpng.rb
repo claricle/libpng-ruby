@@ -31,6 +31,10 @@ module Libpng
   autoload :SimplifiedEncoder, 'libpng/simplified_encoder'
   autoload :SimplifiedDecoder, 'libpng/simplified_decoder'
   autoload :StandardEncoder, 'libpng/standard_encoder'
+  autoload :StandardDecoder, 'libpng/standard_decoder'
+  autoload :TextWriter, 'libpng/text_writer'
+  autoload :TextEntry, 'libpng/text_writer'
+  autoload :MetadataWriter, 'libpng/metadata_writer'
 
   # FFI bindings. Autoloaded so that requiring `libpng` is cheap and
   # does not dlopen libpng16.{so,dylib,dll} -- ext/extconf.rb needs to
@@ -134,6 +138,76 @@ module Libpng
     all: FILTER_ALL
   }.freeze
 
+  # ------------------------------------------------------------------
+  # PNG_TEXT_COMP_* (compression field of png_text struct).
+  # Used by the write path to choose tEXt / zTXt / iTXt output.
+  # libpng's own constants are PNG_TEXT_COMPRESSION_{NONE,zTXt,iTXt}_KEY;
+  # we use SCREAMING_SNAKE_CASE per Ruby convention.
+  # ------------------------------------------------------------------
+  TEXT_COMPRESSION_NONE      = -1 # tEXt
+  TEXT_COMPRESSION_ZTXT_KEY  = 0  # zTXt (zlib)
+  TEXT_COMPRESSION_ITXT_KEY  = 1  # iTXt (no compression by default)
+  TEXT_COMPRESSION_LAST      = 2  # marker; not used as a real value
+
+  TEXT_COMPRESSION_BY_NAME = {
+    text: TEXT_COMPRESSION_NONE,
+    ztxt: TEXT_COMPRESSION_ZTXT_KEY,
+    itxt: TEXT_COMPRESSION_ITXT_KEY
+  }.freeze
+
+  # ------------------------------------------------------------------
+  # sRGB rendering intents (png.h).
+  # ------------------------------------------------------------------
+  SRGB_INTENT_PERCEPTUAL            = 0
+  SRGB_INTENT_RELATIVE_COLORIMETRIC = 1
+  SRGB_INTENT_SATURATION            = 2
+  SRGB_INTENT_ABSOLUTE              = 3
+
+  # ------------------------------------------------------------------
+  # pHYs unit types (png.h).
+  # ------------------------------------------------------------------
+  PHYS_TYPE_UNKNOWN = 0
+  PHYS_TYPE_METER   = 1
+
+  # Meters-per-inch (1 inch = 0.0254 m). Used to convert pHYs pixels-per-meter
+  # to DPI: dpi = ppm * 0.0254.
+  INCH_PER_METER = 0.0254
+
+  # ------------------------------------------------------------------
+  # PNG_INFO_* bit flags (png.h). Returned by png_get_valid to test
+  # which chunks are present in an info_ptr. Renamed to SCREAMING_SNAKE
+  # to match Ruby convention; libpng uses mixed case (PNG_INFO_tRNS,
+  # PNG_INFO_bKGD, etc.) which doesn't pass Ruby style checks.
+  # ------------------------------------------------------------------
+  PNG_INFO_IHDR = 0x0001
+  PNG_INFO_PLTE = 0x0002
+  PNG_INFO_TRNS = 0x0004
+  PNG_INFO_BKGD = 0x0008
+  PNG_INFO_HIST = 0x0010
+  PNG_INFO_PHYS = 0x0020
+  PNG_INFO_OFFS = 0x0040
+  PNG_INFO_TIME = 0x0080
+  PNG_INFO_PCAL = 0x0100
+  PNG_INFO_SRGB = 0x0200
+  PNG_INFO_ICCP = 0x0400
+  PNG_INFO_SBIT = 0x0800
+  PNG_INFO_SPLT = 0x1000
+  PNG_INFO_IDAT = 0x2000
+  PNG_INFO_ACTL = 0x4000
+  PNG_INFO_EXIF = 0x8000
+  PNG_INFO_GAMA = 0x10000
+  PNG_INFO_CHRM = 0x20000
+
+  # png_set_rgb_to_gray error_action values.
+  RGB_TO_GRAY_DEFAULT    = 1 # silent
+  RGB_TO_GRAY_WARN       = 2 # warn on error
+  RGB_TO_GRAY_ERR        = 3 # raise error
+
+  # png_set_filler / png_set_add_alpha filler_position values.
+  # Matches png.h: PNG_FILLER_BEFORE = 0, PNG_FILLER_AFTER = 1.
+  FILLER_BEFORE = 0
+  FILLER_AFTER = 1
+
   # PNG_LIBPNG_VER_STRING. The C string passed as `user_png_ver` to
   # png_create_write_struct. libpng checks this against its compiled-in
   # version; mismatches return NULL. Must match the libpng16 binary we
@@ -174,15 +248,28 @@ module Libpng
     end
 
     # Encode raw pixels via the standard write API. Accepts filter,
-    # compression_level, interlace, bit_depth, and palette options.
-    # Emits only IHDR/IDAT/IEND directly (no chunk stripping needed).
+    # compression_level, interlace, bit_depth, and palette options,
+    # plus text/gamma/srgb_intent/chromaticities/icc_profile/phys
+    # metadata writers. Emits only the chunks libpng's standard path
+    # produces (no post-hoc stripping needed).
     def encode_standard(width, height, pixels, **opts)
       StandardEncoder.new(width, height, pixels, **opts).call
     end
 
-    # Decode a PNG buffer into raw pixels plus IHDR metadata.
+    # Decode a PNG buffer via libpng's simplified read API. Returns a
+    # DecodedImage with width/height/format/pixels plus IHDR fields
+    # and text/color/phys metadata (parsed via ChunkWalker).
     def decode(png, **opts)
       SimplifiedDecoder.new(png, **opts).call
+    end
+
+    # Decode a PNG buffer via libpng's standard read API
+    # (png_create_read_struct -> png_read_info -> optional transforms
+    # -> png_read_image). Use this instead of `decode` when you need
+    # explicit control over which transforms apply. Returns a
+    # DecodedImage with the same metadata fields as `decode`.
+    def decode_standard(png, **opts)
+      StandardDecoder.new(png, **opts).call
     end
   end
 end

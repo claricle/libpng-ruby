@@ -15,8 +15,11 @@ module Libpng
   #                 value. Empty Hash when no text chunks present.
   # +color+         Hash<Symbol,*> of gAMA/cHRM/sRGB/iCCP fields. Empty
   #                 Hash when no color metadata present.
+  # +phys+          Hash<Symbol,*> from pHYs chunk, or nil when absent.
+  #                 Keys: :pixels_per_unit_x, :pixels_per_unit_y, :unit,
+  #                 and (when unit==1) :dpi_x, :dpi_y.
   DecodedImage = Struct.new(:width, :height, :format, :pixels,
                             :bit_depth, :color_type, :interlace,
-                            :text, :color,
+                            :text, :color, :phys,
                             keyword_init: true)
 end

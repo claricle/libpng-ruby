@@ -74,7 +74,8 @@ module Libpng
         color_type: ihdr[:color_type],
         interlace: ihdr[:interlace],
         text: safe_text(walker),
-        color: safe_color(walker)
+        color: safe_color(walker),
+        phys: safe_phys(walker)
       }
     end
 
@@ -94,6 +95,12 @@ module Libpng
       walker.color_chunks
     rescue ChunkWalker::FormatError
       {}
+    end
+
+    def safe_phys(walker)
+      walker.phys_chunk
+    rescue ChunkWalker::FormatError
+      nil
     end
 
     def read_message(img)

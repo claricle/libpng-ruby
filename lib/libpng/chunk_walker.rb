@@ -159,6 +159,23 @@ module Libpng
       result
     end
 
+    # Parse the pHYs chunk (physical pixel dimensions). Returns nil if
+    # no pHYs chunk is present. Otherwise a Hash with:
+    #
+    #   :pixels_per_unit_x -> Integer (uint32 from chunk)
+    #   :pixels_per_unit_y -> Integer (uint32 from chunk)
+    #   :unit               -> Integer 0 (unknown) or 1 (meters)
+    #   :dpi_x              -> Float, only when unit == 1; otherwise nil
+    #   :dpi_y              -> Float, only when unit == 1; otherwise nil
+    #
+    # DPI conversion: 1 inch = 0.0254 m, so dpi = pixels_per_meter * 0.0254.
+    def phys_chunk
+      each_chunk do |type, data, _|
+        return parse_phys(data) if type == 'pHYs'
+      end
+      nil
+    end
+
     private
 
     def verify_signature
@@ -266,6 +283,24 @@ module Libpng
       result[:icc_profile] = profile
     rescue Zlib::Error
       # Skip malformed iCCP rather than failing the whole decode.
+    end
+
+    def parse_phys(data)
+      return if data.length < 9
+
+      ppux, ppuy, unit = data.unpack('NNC')
+      result = {
+        pixels_per_unit_x: ppux,
+        pixels_per_unit_y: ppuy,
+        unit: unit
+      }
+      # DPI = pixels-per-meter * (1 inch / 0.0254 m).
+      # Only meaningful when unit == PHYS_TYPE_METER.
+      if unit == Libpng::PHYS_TYPE_METER
+        result[:dpi_x] = (ppux * Libpng::INCH_PER_METER).round(2)
+        result[:dpi_y] = (ppuy * Libpng::INCH_PER_METER).round(2)
+      end
+      result
     end
   end
 end

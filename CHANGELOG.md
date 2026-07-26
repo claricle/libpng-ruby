@@ -7,6 +7,42 @@ This gem follows a `{LIBPNG_VERSION}.{LIBPNG_RUBY_ITERATION}` version
 scheme. `LIBPNG_VERSION` is the upstream libpng release; `ITERATION`
 bumps for Ruby-side changes and resets to 0 when LIBPNG_VERSION bumps.
 
+## [1.6.58.5] - 2026-07-26
+
+### Added
+- **Write-side metadata on `encode_standard`**. Six new keyword options:
+  - `text:` -- `Hash<String,String>` of tEXt/iTXt entries. Non-ASCII
+    values automatically use iTXt (UTF-8) instead of tEXt (Latin-1).
+  - `gamma:` -- `Float` file gamma (e.g. `0.45455` for sRGB).
+  - `srgb_intent:` -- `Integer 0..3` rendering intent.
+  - `chromaticities:` -- `Hash` with the 8 cHRM primaries.
+  - `icc_profile:` -- `Hash` with `:name` and `:data` for an ICC
+    color profile (libpng compresses internally).
+  - `phys:` -- `Hash` with `:pixels_per_unit_x/y` and `:unit`
+    (`0` unknown, `1` meters).
+- **`pHYs` chunk read support**. `Libpng::ChunkWalker#phys_chunk`
+  returns a Hash with `:pixels_per_unit_x/y`, `:unit`, and (when
+  `unit==1`) computed `:dpi_x/y`. `DecodedImage#phys` is populated
+  by both decode paths.
+- **`Libpng.decode_standard`** -- standard libpng read API
+  (`png_create_read_struct` -> `png_read_info` -> transforms ->
+  `png_read_image`). Counterpart to `encode_standard`; gives
+  callers explicit control over which transforms apply
+  (palette-to-RGB, gray-to-RGB, alpha add/strip, 16-to-8 demotion,
+  interlace handling). Returns the same `DecodedImage` shape as
+  `decode`, so metadata access is uniform across both decode paths.
+- New classes/modules: `Libpng::StandardDecoder`,
+  `Libpng::MetadataWriter`, `Libpng::TextWriter`, `Libpng::TextEntry`.
+- 27 new specs across `spec/write_metadata_spec.rb` (round-trips for
+  every metadata type + validation errors) and
+  `spec/standard_decoder_spec.rb` (transform coverage + Ractor safety).
+
+### Fixed
+- Internal: refactored `StandardEncoder` to delegate metadata writing
+  to `MetadataWriter`. Class length back under rubocop limits.
+- Corrected `FILLER_BEFORE`/`FILLER_AFTER` constant values (the code
+  had them swapped -- libpng uses `BEFORE=0, AFTER=1`).
+
 ## [1.6.58.4] - 2026-07-26
 
 ### Added

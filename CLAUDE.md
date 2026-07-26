@@ -20,12 +20,15 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 | `lib/libpng.rb` | Module + FFI setup + constants + public dispatch (`encode`/`decode`/`encode_standard`) + autoloads |
 | `lib/libpng/version.rb` | `LIBPNG_VERSION`, `LIBPNG_RUBY_ITERATION`, `VERSION` |
 | `lib/libpng/error.rb` | `Libpng::Error` |
-| `lib/libpng/decoded_image.rb` | `Libpng::DecodedImage` (Struct returned by `decode`) |
-| `lib/libpng/chunk_walker.rb` | `Libpng::ChunkWalker` (walk/strip/extract metadata: `#each_chunk`, `#ihdr_fields`, `#text_chunks` for tEXt/zTXt/iTXt, `#color_chunks` for gAMA/cHRM/sRGB/iCCP, `#strip_ancillary`) |
+| `lib/libpng/decoded_image.rb` | `Libpng::DecodedImage` (Struct returned by `decode` / `decode_standard`) |
+| `lib/libpng/chunk_walker.rb` | `Libpng::ChunkWalker` (walk/strip/extract metadata: `#each_chunk`, `#ihdr_fields`, `#text_chunks` for tEXt/zTXt/iTXt, `#color_chunks` for gAMA/cHRM/sRGB/iCCP, `#phys_chunk` for pHYs, `#strip_ancillary`) |
 | `lib/libpng/bytes_per_pixel.rb` | `Libpng::BytesPerPixel` (pure-data lookup) |
 | `lib/libpng/simplified_encoder.rb` | `Libpng::SimplifiedEncoder` (libpng simplified write API) |
-| `lib/libpng/simplified_decoder.rb` | `Libpng::SimplifiedDecoder` (libpng simplified read API + IHDR metadata) |
-| `lib/libpng/standard_encoder.rb` | `Libpng::StandardEncoder` (libpng standard write API with filter/compression/interlace/bit_depth/palette options) |
+| `lib/libpng/simplified_decoder.rb` | `Libpng::SimplifiedDecoder` (libpng simplified read API + metadata via ChunkWalker) |
+| `lib/libpng/standard_encoder.rb` | `Libpng::StandardEncoder` (libpng standard write API; filter/compression/interlace/bit_depth/palette + metadata via MetadataWriter) |
+| `lib/libpng/standard_decoder.rb` | `Libpng::StandardDecoder` (libpng standard read API; explicit transform control) |
+| `lib/libpng/metadata_writer.rb` | `Libpng::MetadataWriter` (validates + writes text/gAMA/sRGB/cHRM/iCCP/pHYs onto a png_ptr/info_ptr pair) |
+| `lib/libpng/text_writer.rb` | `Libpng::TextWriter` + `Libpng::TextEntry` (builds png_text struct array, calls `png_set_text`) |
 | `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem) |
 | `ext/extconf.rb` | Gem extension entry. Triggers `Libpng::Recipe` autoload via `require 'libpng'`, then emits a dummy Makefile |
 
@@ -33,7 +36,9 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 
 ```ruby
 Libpng.encode(width, height, pixels, pixel_format:, convert_to_8bit:, strip_colorspace:)
-Libpng.encode_standard(width, height, pixels, pixel_format:, filter:, compression_level:, interlace:, bit_depth:, palette:)
+Libpng.encode_standard(width, height, pixels, pixel_format:, filter:, compression_level:, interlace:, bit_depth:, palette:, **metadata)
+Libpng.decode(png, pixel_format:)
+Libpng.decode_standard(png, pixel_format:, bit_depth:)
 Libpng.decode(png, pixel_format:)
 ```
 
@@ -58,7 +63,7 @@ Ruby 4.0 removed `Ractor#take`; use the helper `ractor_result(r)` which prefers 
 ```sh
 bundle install
 bundle exec rake compile         # build libpng via MiniPortile (needs cmake + zlib)
-bundle exec rake spec            # all specs (~105 examples)
+bundle exec rake spec            # all specs (~132 examples)
 bundle exec rspec spec/libpng_spec.rb:17   # single spec by line
 bundle exec rake rubocop
 bundle exec rake                 # default: spec + rubocop
@@ -96,12 +101,14 @@ The workflow bumps `lib/libpng/version.rb`, pushes a `v*` tag, builds all 11 pla
 - `spec/libpng_spec.rb` — `encode`/`decode` simplified API
 - `spec/libpng_standard_spec.rb` — `encode_standard` core
 - `spec/standard_encoder_options_spec.rb` — `interlace:`/`bit_depth:`/`palette:` options
+- `spec/write_metadata_spec.rb` — text/gAMA/sRGB/cHRM/pHYs write round-trips + validation
 - `spec/decoded_image_metadata_spec.rb` — IHDR metadata + `ChunkWalker`
-- `spec/text_chunk_spec.rb` — tEXt/zTXt/iTXt parsing
-- `spec/color_metadata_spec.rb` — gAMA/cHRM/sRGB/iCCP parsing
+- `spec/text_chunk_spec.rb` — tEXt/zTXt/iTXt parsing (read side)
+- `spec/color_metadata_spec.rb` — gAMA/cHRM/sRGB/iCCP parsing (read side)
+- `spec/standard_decoder_spec.rb` — `decode_standard` transforms + Ractor safety
 - `spec/malformed_input_spec.rb` — corrupt PNG input handling
 - `spec/ractor_spec.rb` — Ractor safety for simplified API
-- `spec/ractor_standard_spec.rb` — Ractor safety for standard API
+- `spec/ractor_standard_spec.rb` — Ractor safety for standard write API
 - `spec/benchmark_spec.rb` — encode/decode timing comparison
 
 ## See also
