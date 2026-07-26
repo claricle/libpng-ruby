@@ -38,5 +38,5 @@ Priority legend:
 | 16 | P0       | Done     | [Architecture refactor: autoload + OOP](16-architecture-refactor.md)
 | 17 | Future   | Planned  | [Ruby version support policy](17-ruby-version-policy.md)
 | 18 | Future   | Planned  | [Dependabot for automated dependency bumps](18-dependabot.md)
-| 19 | P2       | Planned  | [Text chunk (tEXt/zTXt/iTXt) read support](19-text-chunk-read.md)
-| 20 | P2       | Planned  | [Color metadata read (gAMA/cHRM/sRGB/iCCP)](20-color-metadata-read.md)
+| 19 | P2       | Done     | [Text chunk (tEXt/zTXt/iTXt) read support](19-text-chunk-read.md)
+| 20 | P2       | Done     | [Color metadata read (gAMA/cHRM/sRGB/iCCP)](20-color-metadata-read.md)

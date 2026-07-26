@@ -174,6 +174,13 @@ module Libpng
           'x86_64-darwin'
         when /\A(arm64|aarch64).*linux-musl/
           'aarch64-linux-musl'
+        when /\A(arm64|aarch64).*linux-ohos/
+          # OHOS (OpenHarmony / Huawei HarmonyOS PC) is musl-based arm64.
+          # The resulting binary is ELF64 aarch64 linked against musl,
+          # identical at the file-format level to aarch64-linux-musl --
+          # only the gem's platform label differs so RubyGems on OHOS
+          # selects the right variant.
+          'aarch64-linux-ohos'
         when /\A(arm64|aarch64).*linux/
           'aarch64-linux'
         when /\Ax86_64.*linux-musl/
@@ -198,7 +205,8 @@ module Libpng
 
     def cpu_type
       case target_platform
-      when 'aarch64-linux', 'aarch64-linux-musl', 'arm64-darwin', 'aarch64-mingw-ucrt' then 'aarch64'
+      when 'aarch64-linux', 'aarch64-linux-musl', 'aarch64-linux-ohos',
+           'arm64-darwin', 'aarch64-mingw-ucrt' then 'aarch64'
       when 'x86_64-linux', 'x86_64-linux-musl', 'x86_64-darwin', /\Ax64-mingw/ then 'x86_64'
       else
         super
@@ -207,7 +215,8 @@ module Libpng
 
     def cmake_system_name
       case target_platform
-      when 'aarch64-linux', 'x86_64-linux', 'aarch64-linux-musl', 'x86_64-linux-musl' then 'Linux'
+      when 'aarch64-linux', 'x86_64-linux', 'aarch64-linux-musl',
+           'x86_64-linux-musl', 'aarch64-linux-ohos' then 'Linux'
       when 'arm64-darwin', 'x86_64-darwin' then 'Darwin'
       when /\A(aarch64-)?mingw/, /\Ax64-mingw/ then 'Windows'
       else
@@ -222,7 +231,7 @@ module Libpng
           /Mach-O 64-bit dynamically linked shared library arm64/
         when 'x86_64-darwin'
           /Mach-O 64-bit dynamically linked shared library x86_64/
-        when 'aarch64-linux', 'aarch64-linux-musl'
+        when 'aarch64-linux', 'aarch64-linux-musl', 'aarch64-linux-ohos'
           /ELF 64-bit LSB shared object, ARM aarch64/
         when 'x86_64-linux', 'x86_64-linux-musl'
           /ELF 64-bit LSB shared object, x86-64/

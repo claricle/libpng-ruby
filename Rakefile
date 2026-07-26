@@ -39,6 +39,7 @@ platforms = %w[
   x86_64-linux-musl
   aarch64-linux
   aarch64-linux-musl
+  aarch64-linux-ohos
   x86_64-darwin
   arm64-darwin
 ]

@@ -43,6 +43,7 @@ for the current set):
 | `x86_64-linux-musl` | x86_64 Linux (musl, e.g. Alpine) | `ruby:<ver>-alpine` on x86_64
 | `aarch64-linux` | ARM64 Linux (glibc) | `ubuntu-24.04-arm` (native)
 | `aarch64-linux-musl` | ARM64 Linux (musl) | `ruby:<ver>-alpine` on arm64
+| `aarch64-linux-ohos` | ARM64 OpenHarmony / Huawei HarmonyOS PC | `ruby:<ver>-alpine` on arm64 (byte-compatible with `aarch64-linux-musl`)
 | `x64-mingw32` | x64 Windows, RubyInstaller < 3.0 (MSVCRT) | `windows-latest`
 | `x64-mingw-ucrt` | x64 Windows, RubyInstaller >= 3.0 (UCRT) | `windows-latest`
 | `aarch64-mingw-ucrt` | ARM64 Windows (Ruby >= 3.4) | `windows-11-arm` (native)
@@ -67,6 +68,8 @@ for the current set):
   decoded.bit_depth   # => 8 (from IHDR)
   decoded.color_type  # => 6 (PNG_COLOR_TYPE_RGB_ALPHA, from IHDR)
   decoded.interlace   # => 0 (PNG_INTERLACE_NONE, from IHDR)
+  decoded.text        # => {"Title" => "Sunset", "Author" => "Jane"} (tEXt/zTXt/iTXt)
+  decoded.color       # => {:gamma => 0.45455, :srgb_intent => 0, ...} (gAMA/cHRM/sRGB/iCCP)
 
 === Supported pixel formats
 

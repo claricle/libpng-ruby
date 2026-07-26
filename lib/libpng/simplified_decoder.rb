@@ -4,9 +4,11 @@ module Libpng
   # Decodes a PNG byte buffer into raw pixels via libpng's "simplified"
   # read API (png_image_begin_read_from_memory + png_image_finish_read).
   #
-  # Also parses the IHDR to populate DecodedImage#bit_depth,
-  # #color_type, #interlace for callers that want metadata without
-  # walking the chunks themselves.
+  # Also parses the byte buffer via ChunkWalker to populate
+  # DecodedImage#bit_depth, #color_type, #interlace (from IHDR),
+  # #text (from tEXt/zTXt/iTXt), and #color (from gAMA/cHRM/sRGB/iCCP).
+  # The simplified API itself drops these ancillary chunks on read --
+  # walking them separately is the only way to surface their content.
   #
   # One instance per decode call. Ractor-safe.
   class SimplifiedDecoder
@@ -41,16 +43,12 @@ module Libpng
           ok = Libpng::Binding.png_image_finish_read(img, nil, out_buf, stride, nil)
           raise Error, "png_image_finish_read failed: #{read_message(img)}" if ok.zero?
 
-          pixels = out_buf.read_bytes(out_size)
-          metadata = extract_metadata
           return DecodedImage.new(
             width: width,
             height: height,
             format: @pixel_format.to_s.upcase,
-            pixels: pixels,
-            bit_depth: metadata[:bit_depth],
-            color_type: metadata[:color_type],
-            interlace: metadata[:interlace]
+            pixels: out_buf.read_bytes(out_size),
+            **walker_metadata
           )
         end
       end
@@ -64,11 +62,36 @@ module Libpng
       FORMAT_BY_NAME[@pixel_format.to_s.upcase]
     end
 
-    def extract_metadata
-      fields = ChunkWalker.new(@png).ihdr_fields
-      { bit_depth: fields[:bit_depth],
-        color_type: fields[:color_type],
-        interlace: fields[:interlace] }
+    # Walks the PNG once via ChunkWalker to gather all metadata fields
+    # the simplified API does not surface. Each accessor is best-effort:
+    # a malformed IHDR or text chunk should not poison the rest of the
+    # decode -- empty Hashes / nil values are acceptable fall-throughs.
+    def walker_metadata
+      walker = ChunkWalker.new(@png)
+      ihdr = safe_ihdr(walker)
+      {
+        bit_depth: ihdr[:bit_depth],
+        color_type: ihdr[:color_type],
+        interlace: ihdr[:interlace],
+        text: safe_text(walker),
+        color: safe_color(walker)
+      }
+    end
+
+    def safe_ihdr(walker)
+      walker.ihdr_fields
+    rescue ChunkWalker::FormatError
+      {}
+    end
+
+    def safe_text(walker)
+      walker.text_chunks
+    rescue ChunkWalker::FormatError
+      {}
+    end
+
+    def safe_color(walker)
+      walker.color_chunks
     rescue ChunkWalker::FormatError
       {}
     end

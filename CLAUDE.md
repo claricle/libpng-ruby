@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `libpng` is a Ruby gem that wraps the official libpng shared library via FFI. The native `libpng16.{so,dylib,dll}` is **pre-compiled per target platform and shipped inside the gem** — `gem install libpng` must not require a C compiler on the host.
 
-10 platform gems are published per release (see README for the full matrix).
+10 platform gems are published per release (see README for the full matrix: `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `aarch64-linux-ohos`, `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-darwin`, `arm64-darwin`).
 
 ## Architecture
 
@@ -21,7 +21,7 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 | `lib/libpng/version.rb` | `LIBPNG_VERSION`, `LIBPNG_RUBY_ITERATION`, `VERSION` |
 | `lib/libpng/error.rb` | `Libpng::Error` |
 | `lib/libpng/decoded_image.rb` | `Libpng::DecodedImage` (Struct returned by `decode`) |
-| `lib/libpng/chunk_walker.rb` | `Libpng::ChunkWalker` (walk/strip/extract metadata from PNG bytes) |
+| `lib/libpng/chunk_walker.rb` | `Libpng::ChunkWalker` (walk/strip/extract metadata: `#each_chunk`, `#ihdr_fields`, `#text_chunks` for tEXt/zTXt/iTXt, `#color_chunks` for gAMA/cHRM/sRGB/iCCP, `#strip_ancillary`) |
 | `lib/libpng/bytes_per_pixel.rb` | `Libpng::BytesPerPixel` (pure-data lookup) |
 | `lib/libpng/simplified_encoder.rb` | `Libpng::SimplifiedEncoder` (libpng simplified write API) |
 | `lib/libpng/simplified_decoder.rb` | `Libpng::SimplifiedDecoder` (libpng simplified read API + IHDR metadata) |
@@ -58,7 +58,7 @@ Ruby 4.0 removed `Ractor#take`; use the helper `ractor_result(r)` which prefers 
 ```sh
 bundle install
 bundle exec rake compile         # build libpng via MiniPortile (needs cmake + zlib)
-bundle exec rake spec            # all specs (~81 examples)
+bundle exec rake spec            # all specs (~105 examples)
 bundle exec rspec spec/libpng_spec.rb:17   # single spec by line
 bundle exec rake rubocop
 bundle exec rake                 # default: spec + rubocop
@@ -67,7 +67,7 @@ bundle exec rake gem:native:arm64-darwin    # build a pre-compiled gem
 bundle exec rake gem:native:any             # source gem (compiles on install)
 ```
 
-Platform gem tasks: `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `x86_64-darwin`, `arm64-darwin`.
+Platform gem tasks: `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `aarch64-linux-ohos`, `x86_64-darwin`, `arm64-darwin`.
 
 ## Release process
 
@@ -79,7 +79,7 @@ gh workflow run release.yml --repo claricle/libpng-ruby --ref main -f bump-type=
 # or: -f bump-type=current  # release current VERSION as-is
 ```
 
-The workflow bumps `lib/libpng/version.rb`, pushes a `v*` tag, builds all 10 platform gems, and publishes to RubyGems via OIDC Trusted Publishing.
+The workflow bumps `lib/libpng/version.rb`, pushes a `v*` tag, builds all 11 platform gems (10 native + the source `ruby` gem), and publishes to RubyGems via OIDC Trusted Publishing.
 
 **Never** push tags or merge to main directly — always go through PRs.
 
@@ -97,6 +97,8 @@ The workflow bumps `lib/libpng/version.rb`, pushes a `v*` tag, builds all 10 pla
 - `spec/libpng_standard_spec.rb` — `encode_standard` core
 - `spec/standard_encoder_options_spec.rb` — `interlace:`/`bit_depth:`/`palette:` options
 - `spec/decoded_image_metadata_spec.rb` — IHDR metadata + `ChunkWalker`
+- `spec/text_chunk_spec.rb` — tEXt/zTXt/iTXt parsing
+- `spec/color_metadata_spec.rb` — gAMA/cHRM/sRGB/iCCP parsing
 - `spec/malformed_input_spec.rb` — corrupt PNG input handling
 - `spec/ractor_spec.rb` — Ractor safety for simplified API
 - `spec/ractor_standard_spec.rb` — Ractor safety for standard API

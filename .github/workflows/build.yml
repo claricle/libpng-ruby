@@ -143,6 +143,12 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
+          # OHOS (OpenHarmony / Huawei HarmonyOS PC) is musl-based arm64.
+          # Built inside the same Alpine container as aarch64-linux-musl;
+          # the resulting binary is byte-compatible. Only the gem's
+          # platform label differs so RubyGems on OHOS selects it.
+          - os: ubuntu-24.04-arm
+            platform: aarch64-linux-ohos
 
     steps:
     - uses: actions/checkout@v4

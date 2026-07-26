@@ -201,6 +201,10 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
+          # OHOS: same Alpine-built musl arm64 binary as aarch64-linux-musl,
+          # packaged under a distinct platform label.
+          - os: ubuntu-24.04-arm
+            platform: aarch64-linux-ohos
     steps:
       - uses: actions/checkout@v4
         with:
