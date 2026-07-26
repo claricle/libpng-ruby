@@ -83,12 +83,30 @@ echo "Detected OHOS lib dir: $LIB_DIR"
 echo "Sample files in lib dir:"
 ls -la "$LIB_DIR" | head -10 >&2
 
+# libpng depends on zlib. Find zlib in the OHOS sysroot so we can
+# tell CMake exactly where it lives (FindZLIB with cross-compile
+# restrictions can't auto-discover it in OHOS's non-standard layout).
+ZLIB_LIB=$(find "$SYSROOT" -name 'libz.so' -o -name 'libz.so.*' 2>/dev/null | grep -v '\.debug' | head -1)
+ZLIB_INCLUDE=$(find "$SYSROOT" -name 'zlib.h' 2>/dev/null | head -1)
+if [ -z "$ZLIB_LIB" ] || [ -z "$ZLIB_INCLUDE" ]; then
+  echo "ERROR: zlib not found under $SYSROOT" >&2
+  echo "  libz.so: ${ZLIB_LIB:-MISSING}" >&2
+  echo "  zlib.h:  ${ZLIB_INCLUDE:-MISSING}" >&2
+  exit 1
+fi
+ZLIB_LIB_DIR=$(cd "$(dirname "$ZLIB_LIB")" && pwd)
+ZLIB_INCLUDE_DIR=$(cd "$(dirname "$ZLIB_INCLUDE")" && pwd)
+echo "Detected zlib lib: $ZLIB_LIB"
+echo "Detected zlib include: $ZLIB_INCLUDE_DIR"
+
 # 3. Export env vars (for GitHub Actions; harmless elsewhere)
 if [ -n "${GITHUB_ENV:-}" ]; then
   echo "OHOS_NDK_ROOT=$OHOS_NDK_ROOT" >> "$GITHUB_ENV"
   echo "OHOS_LLVM=$OHOS_NDK_ROOT/llvm-19/llvm" >> "$GITHUB_ENV"
   echo "OHOS_SYSROOT=$SYSROOT" >> "$GITHUB_ENV"
   echo "OHOS_LIB_DIR=$LIB_DIR" >> "$GITHUB_ENV"
+  echo "OHOS_ZLIB_LIBRARY=$ZLIB_LIB" >> "$GITHUB_ENV"
+  echo "OHOS_ZLIB_INCLUDE_DIR=$ZLIB_INCLUDE_DIR" >> "$GITHUB_ENV"
   echo "OHOS_SIGN_TOOL=$OHOS_NDK_ROOT/ohos-sdk/linux/toolchains/lib/binary-sign-tool" >> "$GITHUB_ENV"
   # Build IDs for traceability
   echo "OHOS_SDK_BUILD_ID=$SDK_BUILD_ID" >> "$GITHUB_ENV"
@@ -99,4 +117,6 @@ echo "OHOS NDK setup complete:"
 echo "  OHOS_LLVM=$OHOS_NDK_ROOT/llvm-19/llvm"
 echo "  OHOS_SYSROOT=$SYSROOT"
 echo "  OHOS_LIB_DIR=$LIB_DIR"
+echo "  OHOS_ZLIB_LIBRARY=$ZLIB_LIB"
+echo "  OHOS_ZLIB_INCLUDE_DIR=$ZLIB_INCLUDE_DIR"
 echo "  OHOS_SIGN_TOOL=$OHOS_NDK_ROOT/ohos-sdk/linux/toolchains/lib/binary-sign-tool"
