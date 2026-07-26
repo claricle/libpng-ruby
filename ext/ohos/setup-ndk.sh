@@ -57,8 +57,11 @@ sdk_url=$(query_component "ohos-sdk-public" | jq -r '.data.list.dataList[0].obsP
 [ -n "$sdk_url" ] || { echo "setup-ndk: failed to resolve sdk URL" >&2; exit 1; }
 echo "setup-ndk: downloading $sdk_url"
 curl -fL "$sdk_url" -o "$TMP/ohos-sdk-public.tar.gz"
-mkdir -p "$PREFIX/ohos-sdk"
-tar -zxf "$TMP/ohos-sdk-public.tar.gz" -C "$PREFIX/ohos-sdk"
+# The SDK tarball already contains ohos-sdk/{linux,windows,ohos}/ at the
+# top level. Extract straight into $PREFIX so $PREFIX/ohos-sdk/linux/ ends
+# up at the expected path (extracting into $PREFIX/ohos-sdk would create
+# $PREFIX/ohos-sdk/ohos-sdk/linux/ -- which broke CI run 1).
+tar -zxf "$TMP/ohos-sdk-public.tar.gz" -C "$PREFIX"
 # Drop non-linux variants to keep the cache small.
 rm -rf "$PREFIX/ohos-sdk/windows" "$PREFIX/ohos-sdk/ohos" 2>/dev/null || true
 cd "$PREFIX/ohos-sdk/linux"
@@ -74,13 +77,17 @@ llvm_url=$(query_component "LLVM-19" | jq -r '.data.list.dataList[0].obsPath')
 [ -n "$llvm_url" ] || { echo "setup-ndk: failed to resolve LLVM-19 URL" >&2; exit 1; }
 echo "setup-ndk: downloading $llvm_url"
 curl -fL "$llvm_url" -o "$TMP/LLVM-19.tar.gz"
+# LLVM-19 tarball extracts to ./llvm-linux-x86_64.tar.gz + ./ohos-sysroot.tar.gz
+# at the top level. Extract straight into $PREFIX/llvm-19/ so the inner
+# tarballs land where the next step expects them.
 mkdir -p "$PREFIX/llvm-19"
 tar -zxf "$TMP/LLVM-19.tar.gz" -C "$PREFIX/llvm-19"
 cd "$PREFIX/llvm-19"
 tar -zxf llvm-linux-x86_64.tar.gz
+rm -rf llvm-linux-x86_64.tar.gz
 mkdir -p sysroot
 tar -zxf ohos-sysroot.tar.gz -C sysroot
-rm -f llvm-linux-x86_64.tar.gz ohos-sysroot.tar.gz
+rm -rf ohos-sysroot.tar.gz
 cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
