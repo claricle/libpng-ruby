@@ -25,6 +25,7 @@ done
 # Resolve to absolute path. Relative paths break `ln -s` below: symlink
 # targets are interpreted relative to the SYMLINK's location, not the
 # script's cwd. A relative $PREFIX would create a dangling symlink.
+mkdir -p "$PREFIX"
 PREFIX="$(cd "$PREFIX" && pwd)"
 
 SDK_DIR="$PREFIX/ohos-sdk/linux"
