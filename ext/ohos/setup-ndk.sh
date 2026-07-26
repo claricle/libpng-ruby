@@ -89,8 +89,11 @@ tar -zxf "$TMP/LLVM-19.tar.gz" -C "$PREFIX/llvm-19"
 cd "$PREFIX/llvm-19"
 tar -zxf llvm-linux-x86_64.tar.gz
 rm -rf llvm-linux-x86_64.tar.gz
-mkdir -p sysroot
-tar -zxf ohos-sysroot.tar.gz -C sysroot
+# ohos-sysroot.tar.gz already contains sysroot/ at the top level (per
+# ohos-node/build.sh). Extract directly into $PREFIX/llvm-19/ -- NOT into
+# $PREFIX/llvm-19/sysroot/ (that would create a nested sysroot/sysroot/
+# and break the SDK-sysroot symlink below).
+tar -zxf ohos-sysroot.tar.gz
 rm -rf ohos-sysroot.tar.gz
 cd -
 
