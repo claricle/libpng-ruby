@@ -22,7 +22,7 @@ Metrics/ModuleLength:
 Metrics/PerceivedComplexity:
   Max: 20
 Metrics/ParameterLists:
-  Max: 9
+  Max: 10
 
 Metrics/BlockLength:
   Exclude:
@@ -37,3 +37,11 @@ Style/FrozenStringLiteralComment:
   Exclude:
     - ext/extconf.rb
     - lib/libpng/recipe.rb
+
+# libpng's C function names use mixed case + digits (e.g.
+# png_set_strip_16, png_set_expand_gray_1_2_4_to_8). We attach them
+# via FFI with their canonical names so docs and headers cross-
+# reference cleanly.
+Naming/VariableNumber:
+  Exclude:
+    - lib/libpng/binding.rb

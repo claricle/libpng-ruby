@@ -19,15 +19,32 @@ module Libpng
   #   palette:          Array of [r, g, b] or [r, g, b, a] for
   #                     pixel_format: :palette. 1..256 entries.
   #
+  # Metadata options (forwarded to MetadataWriter; written between
+  # IHDR/PLTE and png_write_png):
+  #   text:             Hash<String,String> of tEXt keyword -> value.
+  #                     Values with non-ASCII bytes use iTXt (UTF-8).
+  #   gamma:            Float file gamma (e.g. 0.45455 for sRGB).
+  #   srgb_intent:      Integer 0..3 (perceptual, relative-colorimetric,
+  #                     saturation, absolute-colorimetric).
+  #   chromaticities:   Hash with :white_point_x/y, :red_x/y,
+  #                     :green_x/y, :blue_x/y (each a Float 0..1).
+  #   icc_profile:      Hash with :name (String) and :data (binary
+  #                     String). libpng compresses via zlib internally.
+  #   phys:             Hash with :pixels_per_unit_x, :pixels_per_unit_y,
+  #                     and :unit (0 = unknown, 1 = meters).
+  #
   # One instance per encode call. Ractor-safe.
   class StandardEncoder
+    METADATA_KEYS = %i[text gamma srgb_intent chromaticities icc_profile phys].freeze
+
     def initialize(width, height, pixels,
                    pixel_format: 'RGBA',
                    filter: :default,
                    compression_level: 6,
                    interlace: :none,
                    bit_depth: 8,
-                   palette: nil)
+                   palette: nil,
+                   **metadata)
       @width = width
       @height = height
       @pixels = pixels
@@ -37,6 +54,7 @@ module Libpng
       @interlace_sym = interlace.to_sym
       @bit_depth = bit_depth
       @palette = palette
+      @metadata = metadata
       validate!
     end
 
@@ -61,6 +79,9 @@ module Libpng
                                      COMPRESSION_TYPE_DEFAULT, FILTER_TYPE_DEFAULT)
         apply_filter(png_ptr)
         apply_palette(png_ptr, info_ptr) if palette_format?
+        # Metadata writers run AFTER IHDR/PLTE and BEFORE png_write_png
+        # (which is what calls png_write_info -> emits all queued chunks).
+        MetadataWriter.apply(png_ptr, info_ptr, @metadata)
 
         FFI::MemoryPointer.new(:uint8, @pixels.bytesize) do |px|
           px.write_bytes(@pixels)
@@ -117,6 +138,7 @@ module Libpng
 
       validate_bit_depth!
       validate_palette! if palette_format?
+      MetadataWriter.validate!(@metadata)
       return unless @pixels.bytesize < expected_size
 
       raise Error,
