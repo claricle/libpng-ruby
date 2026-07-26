@@ -10,12 +10,6 @@ require 'libpng'
 # up once at require time and is shareable across Ractors.
 return unless defined?(Ractor)
 
-# Ruby 4.0 (Dec 2025) removed Ractor#take in favor of Ractor#value.
-# https://www.ruby-lang.org/en/news/2025/12/25/ruby-4-0-0-released/
-def ractor_result(ractor)
-  ractor.respond_to?(:value) ? ractor.value : ractor.take
-end
-
 RSpec.describe Libpng, 'Ractor safety' do
   let(:width) { 4 }
   let(:height) { 2 }

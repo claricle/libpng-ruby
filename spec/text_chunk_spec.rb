@@ -112,10 +112,9 @@ RSpec.describe Libpng::DecodedImage, 'text metadata' do
   it 'round-trips through Ractor moving (frozen-keyword Struct compatibility)' do
     png = ChunkBuilder.inject_after_ihdr(ChunkBuilder.minimal_rgba,
                                          [['tEXt', "Author\0Jane"]])
-    decoded_in_ractor = Ractor.new(png) do |bytes|
-      require 'libpng'
+    ractor = Ractor.new(png) do |bytes|
       Libpng.decode(bytes, pixel_format: 'RGBA').text
-    end.take
-    expect(decoded_in_ractor).to eq('Author' => 'Jane')
+    end
+    expect(ractor_result(ractor)).to eq('Author' => 'Jane')
   end
 end
