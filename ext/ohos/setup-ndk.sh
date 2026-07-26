@@ -121,3 +121,10 @@ else
 fi
 echo "setup-ndk: locating critical files..."
 find "$PREFIX" -maxdepth 9 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name 'alltypes.h' \) -print | head -20
+echo "setup-ndk: CRT objects + libs in per-arch sysroot:"
+find "$PREFIX/llvm-19/sysroot/aarch64-linux-ohos" -name 'Scrt1.o' -o -name 'crti.o' -o -name 'libc.so*' -o -name 'libm.so*' 2>&1 | head -10
+echo "setup-ndk: CRT objects + libs in original SDK sysroot (multiarch):"
+find "$PREFIX/ohos-sdk/linux/native/sysroot" -maxdepth 7 -name 'Scrt1.o' -o -name 'crti.o' -o -name 'libc.so*' -o -name 'libm.so*' 2>&1 | head -10
+echo "setup-ndk: ohos-sdk/linux/native/sysroot resolves to:"
+readlink "$PREFIX/ohos-sdk/linux/native/sysroot" 2>&1 || echo "(not a symlink)"
+ls -la "$PREFIX/ohos-sdk/linux/native/sysroot/usr/lib" 2>&1 | head -20
