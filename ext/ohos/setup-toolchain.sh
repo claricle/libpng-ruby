@@ -81,7 +81,7 @@ fi
 echo "Detected OHOS sysroot: $SYSROOT"
 echo "Detected OHOS lib dir: $LIB_DIR"
 echo "Sample files in lib dir:"
-ls -la "$LIB_DIR" | head -10 >&2
+ls -la "$LIB_DIR" | head -10 || true
 
 # libpng depends on zlib. Find zlib in the OHOS sysroot so we can
 # tell CMake exactly where it lives (FindZLIB with cross-compile
