@@ -44,6 +44,13 @@ module ChunkBuilder
   end
 end
 
+# Reads the result of a Ractor across Ruby versions: Ruby 4.0 (Dec 2025)
+# removed Ractor#take in favor of Ractor#value. Specs need to work on
+# both, so prefer #value when present.
+def ractor_result(ractor)
+  ractor.respond_to?(:value) ? ractor.value : ractor.take
+end
+
 RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect

@@ -174,12 +174,27 @@ jobs:
         git config --global --add safe.directory /work
         bundle install --jobs 4
         bundle exec rake "gem:native:${PLATFORM}"
-        gem install -b pkg/libpng-*.gem
-        # Smoke test from /tmp so bundler's source-tree LOAD_PATH doesn't
-        # shadow the installed gem. Activate via `gem` so RubyGems resolves
-        # the platform-specific binary gem (Alpine Ruby's platform string
-        # is *-linux-musl, which must match the gem's platform suffix).
-        (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+        case "${PLATFORM}" in
+          *-ohos)
+            # OHOS gem is labeled aarch64-linux-ohos so RubyGems on OHOS
+            # selects it, but Alpine Ruby reports *-linux-musl -- a
+            # platform mismatch. The .so inside is musl-compatible, so
+            # unpack the gem and load it via -Ilib directly to verify
+            # the binary works without going through RubyGems install.
+            mkdir -p /tmp/ohos-smoke
+            gem unpack "pkg/libpng-*.gem" --target /tmp/ohos-smoke
+            (cd /tmp/ohos-smoke/libpng-* && \
+              ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+            ;;
+          *)
+            gem install -b pkg/libpng-*.gem
+            # Smoke test from /tmp so bundler's source-tree LOAD_PATH doesn't
+            # shadow the installed gem. Activate via `gem` so RubyGems resolves
+            # the platform-specific binary gem (Alpine Ruby's platform string
+            # is *-linux-musl, which must match the gem's platform suffix).
+            (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+            ;;
+        esac
         BUILD_EOF
         chmod +x /tmp/alpine-build.sh
         docker run --rm \

@@ -8,10 +8,6 @@ require 'libpng'
 RSpec.describe Libpng, '.encode_standard Ractor safety' do
   return unless defined?(Ractor)
 
-  def ractor_result(ractor)
-    ractor.respond_to?(:value) ? ractor.value : ractor.take
-  end
-
   let(:width) { 4 }
   let(:height) { 2 }
   let(:rgba) do
