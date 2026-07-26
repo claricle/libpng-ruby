@@ -53,23 +53,34 @@ tar -zxf LLVM-19.tar.gz -C llvm-19
 )
 
 # The ohos-sysroot.tar.gz extracts to a layout like:
-#   llvm-19/ohos-sysroot/usr/lib/aarch64-linux-ohos/{Scrt1.o,libc.so,...}
-#   llvm-19/ohos-sysroot/usr/include/...
-# Detect the actual sysroot dir (in case the tarball layout differs).
-SYSROOT_DIR=$(find "$OHOS_NDK_ROOT/llvm-19" -type d -name 'aarch64-linux-ohos' 2>/dev/null | head -1)
-if [ -z "$SYSROOT_DIR" ]; then
-  echo "ERROR: could not find aarch64-linux-ohos multiarch dir under $OHOS_NDK_ROOT/llvm-19" >&2
+#   llvm-19/sysroot/aarch64-linux-ohos/{Scrt1.o,libc.so,...}
+#   llvm-19/sysroot/usr/include/...
+# Find Scrt1.o and back-compute the sysroot + multiarch paths from its
+# location. This handles both layouts (sysroot/aarch64-linux-ohos and
+# sysroot/usr/lib/aarch64-linux-ohos) without hard-coding depth.
+CRT_FILE=$(find "$OHOS_NDK_ROOT/llvm-19" -name 'Scrt1.o' -path '*aarch64-linux-ohos*' 2>/dev/null | head -1)
+if [ -z "$CRT_FILE" ]; then
+  echo "ERROR: could not find Scrt1.o under $OHOS_NDK_ROOT/llvm-19" >&2
   echo "Layout found:" >&2
   find "$OHOS_NDK_ROOT/llvm-19" -maxdepth 4 -type d >&2
   exit 1
 fi
-# SYSROOT_DIR is .../usr/lib/aarch64-linux-ohos; walk up three levels to
-# get the sysroot root (.../usr or the parent of usr).
-SYSROOT=$(cd "$SYSROOT_DIR/../../.." && pwd)
-LIB_DIR="$SYSROOT_DIR"
+# LIB_DIR = directory containing Scrt1.o (= the multiarch lib dir).
+LIB_DIR=$(cd "$(dirname "$CRT_FILE")" && pwd)
+# SYSROOT = nearest ancestor named "sysroot", else parent of the
+# multiarch dir. The OHOS layout uses sysroot/aarch64-linux-ohos;
+# a more conventional layout would have sysroot/usr/lib/aarch64-linux-ohos.
+SYSROOT=$(cd "$LIB_DIR" && pwd)
+while [ "$(basename "$SYSROOT")" != "sysroot" ] && [ "$SYSROOT" != "/" ]; do
+  SYSROOT=$(dirname "$SYSROOT")
+done
+if [ "$SYSROOT" = "/" ]; then
+  # No 'sysroot' dir found; fall back to LIB_DIR's parent.
+  SYSROOT=$(dirname "$LIB_DIR")
+fi
 echo "Detected OHOS sysroot: $SYSROOT"
 echo "Detected OHOS lib dir: $LIB_DIR"
-echo "Sample files:"
+echo "Sample files in lib dir:"
 ls -la "$LIB_DIR" | head -10 >&2
 
 # 3. Export env vars (for GitHub Actions; harmless elsewhere)
