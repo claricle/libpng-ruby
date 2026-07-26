@@ -45,6 +45,20 @@ module Libpng
                   %i[pointer pointer pointer int pointer int pointer], :int
   attach_function :png_image_free, [:pointer], :void
 
+  # libpng standard (non-simplified) write API. Used by encode_standard.
+  attach_function :png_create_write_struct,
+                  %i[string pointer pointer pointer], :pointer
+  attach_function :png_create_info_struct, [:pointer], :pointer
+  attach_function :png_destroy_write_struct, %i[pointer pointer], :void
+  attach_function :png_set_IHDR,
+                  %i[pointer pointer uint32 uint32 int int int int int], :void
+  attach_function :png_set_rows, %i[pointer pointer pointer], :void
+  attach_function :png_set_filter, %i[pointer int int], :void
+  attach_function :png_set_compression_level, %i[pointer int], :void
+  attach_function :png_set_write_fn,
+                  %i[pointer pointer pointer pointer], :void
+  attach_function :png_write_png, %i[pointer pointer int pointer], :void
+
   # PNG_IMAGE_FORMAT_* bit flags and named formats from png.h.
   FORMAT_FLAG_ALPHA = 0x01
   FORMAT_FLAG_COLOR = 0x02
@@ -76,6 +90,64 @@ module Libpng
     'BGRA' => FORMAT_BGRA,
     'ABGR' => FORMAT_ABGR
   }.freeze
+
+  # PNG_COLOR_MASK_* and PNG_COLOR_TYPE_* (png.h).
+  COLOR_MASK_PALETTE = 0x01
+  COLOR_MASK_COLOR   = 0x02
+  COLOR_MASK_ALPHA   = 0x04
+
+  COLOR_TYPE_GRAY         = 0
+  COLOR_TYPE_PALETTE      = COLOR_MASK_COLOR | COLOR_MASK_PALETTE
+  COLOR_TYPE_RGB          = COLOR_MASK_COLOR
+  COLOR_TYPE_RGB_ALPHA    = COLOR_MASK_COLOR | COLOR_MASK_ALPHA
+  COLOR_TYPE_GRAY_ALPHA   = COLOR_MASK_ALPHA
+
+  # Map our FORMAT_* to PNG_COLOR_TYPE_*. encode_standard doesn't support
+  # the BGR/ARGB/BGRA/ABGR byte-order variants because the standard API
+  # encodes host-order; callers wanting those formats should use the
+  # simplified encode path or pre-swap bytes.
+  COLOR_TYPE_BY_FORMAT = {
+    FORMAT_GRAY => COLOR_TYPE_GRAY,
+    FORMAT_GA => COLOR_TYPE_GRAY_ALPHA,
+    FORMAT_AG => COLOR_TYPE_GRAY_ALPHA,
+    FORMAT_RGB => COLOR_TYPE_RGB,
+    FORMAT_RGBA => COLOR_TYPE_RGB_ALPHA
+  }.freeze
+
+  # png_set_IHDR pass-through constants (png.h).
+  INTERLACE_NONE            = 0
+  INTERLACE_ADAM7           = 1
+  COMPRESSION_TYPE_DEFAULT  = 0
+  FILTER_TYPE_DEFAULT       = 0
+  TRANSFORM_IDENTITY        = 0x0000
+
+  # png_set_filter bitmask (PNG_FILTER_*). :default lets libpng use
+  # adaptive filtering across all filter types -- this is what
+  # libemf2svg/rgb2png effectively does via PNG_FILTER_TYPE_DEFAULT in
+  # the IHDR.
+  FILTER_HEURISTIC_DEFAULT  = 0
+  FILTER_NONE               = 0x08
+  FILTER_SUB                = 0x10
+  FILTER_UP                 = 0x20
+  FILTER_AVG                = 0x40
+  FILTER_PAETH              = 0x80
+  FILTER_ALL                = FILTER_NONE | FILTER_SUB | FILTER_UP | FILTER_AVG | FILTER_PAETH
+
+  FILTER_MASK_BY_NAME = {
+    default: nil,           # don't call png_set_filter at all
+    adaptive: FILTER_ALL,   # call with all filters allowed (same as default)
+    none: FILTER_NONE,
+    sub: FILTER_SUB,
+    up: FILTER_UP,
+    avg: FILTER_AVG,
+    paeth: FILTER_PAETH,
+    all: FILTER_ALL
+  }.freeze
+
+  # PNG_LIBPNG_VER_STRING. Used as the user_png_ver arg to
+  # png_create_write_struct. Must match the libpng16.{so,dylib,dll} we
+  # ship -- if these ever drift, png_create_write_struct aborts.
+  LIBPNG_VER_STRING_C = Libpng::LIBPNG_VERSION.dup.freeze
 
   # png_image::version value libpng checks for. Defined in png.h as
   # PNG_IMAGE_VERSION == 1.
@@ -189,6 +261,111 @@ module Libpng
         end
       ensure
         png_image_free(img)
+      end
+    end
+
+    # Encode raw pixels via libpng's standard write API
+    # (png_create_write_struct -> png_set_IHDR -> png_set_rows ->
+    # png_write_png(PNG_TRANSFORM_IDENTITY)). This matches the byte
+    # output of the "classic" libpng write path used by libemf2svg's
+    # rgb2png, and avoids the sRGB/gAMA chunks the simplified API
+    # injects by default.
+    #
+    # +width+, +height+  image dimensions in pixels
+    # +pixels+           String of raw pixel bytes (row-major, top-down)
+    # +pixel_format+     "RGB", "RGBA", "GRAY", "GA" (default: "RGBA")
+    # +filter+           :default (adaptive), :none, :sub, :up, :avg,
+    #                    :paeth, :all, :adaptive (default: :default)
+    # +compression_level+ zlib level 0-9 (default: 6 = Z_DEFAULT_COMPRESSION)
+    #
+    # Output is accumulated in a Ruby String via png_set_write_fn --
+    # no Tempfile, no disk I/O. The FFI write callback is held on a
+    # local Array so it isn't GC'd mid-call.
+    #
+    # Errors are raised via a png_set_error_fn callback (set on
+    # png_create_write_struct). libpng expects error callbacks to
+    # longjmp; rb_raise from the FFI callback unwinds the Ruby stack
+    # instead, which works for our usage but means the png_struct is
+    # not cleanly torn down inside libpng. The ensure block calls
+    # png_destroy_write_struct to release the C state.
+    #
+    # Ractor-safe: all state is per-call. FFI callbacks are not
+    # shareable across Ractors, but they're locals and stay scoped
+    # to one Ractor.
+    def encode_standard(width, height, pixels, pixel_format: 'RGBA',
+                        filter: :default, compression_level: 6)
+      raise Error, 'width must be positive' unless width.positive?
+      raise Error, 'height must be positive' unless height.positive?
+
+      fmt = FORMAT_BY_NAME[pixel_format.to_s.upcase] ||
+            raise(Error, "unknown pixel_format #{pixel_format.inspect}")
+      color_type = COLOR_TYPE_BY_FORMAT[fmt] ||
+                   raise(Error, "encode_standard does not support #{pixel_format} " \
+                                '(use GRAY, GA, RGB, or RGBA; byte-order variants ' \
+                                'like BGRA/ARGB/ABGR are simplified-API only)')
+
+      bytes_per_pixel = bytes_per_pixel_for_format(fmt)
+      stride = width * bytes_per_pixel
+      expected = stride * height
+      raise Error, "pixels too short: expected #{expected}, got #{pixels.bytesize}" if pixels.bytesize < expected
+
+      filter_sym = filter.to_sym
+      unless FILTER_MASK_BY_NAME.key?(filter_sym)
+        raise Error, "unknown filter #{filter.inspect} " \
+                     '(expected :default, :adaptive, :none, :sub, :up, :avg, :paeth, or :all)'
+      end
+      filter_mask = FILTER_MASK_BY_NAME[filter_sym]
+      raise Error, 'compression_level must be 0..9' unless (0..9).cover?(compression_level)
+
+      output = String.new.force_encoding('ASCII-8BIT')
+
+      # FFI::Function objects need a stable reference for the duration of
+      # the libpng calls -- otherwise they can be GC'd before libpng
+      # invokes them.
+      callbacks = []
+      write_cb = FFI::Function.new(:void, %i[pointer pointer size_t]) do |_, data, len|
+        output << data.read_bytes(len)
+      end
+      error_cb = FFI::Function.new(:void, %i[pointer string]) do |_, msg|
+        raise Error, "libpng: #{msg}"
+      end
+      callbacks << write_cb << error_cb
+
+      png_ptr = FFI::Pointer.new(0)
+      info_ptr = FFI::Pointer.new(0)
+      begin
+        png_ptr = png_create_write_struct(LIBPNG_VER_STRING_C, nil, error_cb, nil)
+        raise Error, 'png_create_write_struct returned NULL' if png_ptr.null?
+
+        info_ptr = png_create_info_struct(png_ptr)
+        raise Error, 'png_create_info_struct returned NULL' if info_ptr.null?
+
+        png_set_compression_level(png_ptr, compression_level)
+        png_set_write_fn(png_ptr, nil, write_cb, nil)
+        png_set_IHDR(png_ptr, info_ptr, width, height, 8, color_type,
+                     INTERLACE_NONE, COMPRESSION_TYPE_DEFAULT, FILTER_TYPE_DEFAULT)
+        png_set_filter(png_ptr, FILTER_HEURISTIC_DEFAULT, filter_mask) if filter_mask
+
+        FFI::MemoryPointer.new(:uint8, pixels.bytesize) do |px|
+          px.write_bytes(pixels)
+          FFI::MemoryPointer.new(:pointer, height) do |rows|
+            height.times { |y| rows.put_pointer(y * FFI.type_size(:pointer), px + (y * stride)) }
+            png_set_rows(png_ptr, info_ptr, rows)
+            png_write_png(png_ptr, info_ptr, TRANSFORM_IDENTITY, nil)
+          end
+        end
+
+        output
+      ensure
+        unless png_ptr.null?
+          FFI::MemoryPointer.new(:pointer) do |pp|
+            pp.write_pointer(png_ptr)
+            FFI::MemoryPointer.new(:pointer) do |ip|
+              ip.write_pointer(info_ptr)
+              png_destroy_write_struct(pp, ip)
+            end
+          end
+        end
       end
     end
 
