@@ -52,11 +52,32 @@ tar -zxf LLVM-19.tar.gz -C llvm-19
   tar -zxf ohos-sysroot.tar.gz
 )
 
+# The ohos-sysroot.tar.gz extracts to a layout like:
+#   llvm-19/ohos-sysroot/usr/lib/aarch64-linux-ohos/{Scrt1.o,libc.so,...}
+#   llvm-19/ohos-sysroot/usr/include/...
+# Detect the actual sysroot dir (in case the tarball layout differs).
+SYSROOT_DIR=$(find "$OHOS_NDK_ROOT/llvm-19" -type d -name 'aarch64-linux-ohos' 2>/dev/null | head -1)
+if [ -z "$SYSROOT_DIR" ]; then
+  echo "ERROR: could not find aarch64-linux-ohos multiarch dir under $OHOS_NDK_ROOT/llvm-19" >&2
+  echo "Layout found:" >&2
+  find "$OHOS_NDK_ROOT/llvm-19" -maxdepth 4 -type d >&2
+  exit 1
+fi
+# SYSROOT_DIR is .../usr/lib/aarch64-linux-ohos; walk up three levels to
+# get the sysroot root (.../usr or the parent of usr).
+SYSROOT=$(cd "$SYSROOT_DIR/../../.." && pwd)
+LIB_DIR="$SYSROOT_DIR"
+echo "Detected OHOS sysroot: $SYSROOT"
+echo "Detected OHOS lib dir: $LIB_DIR"
+echo "Sample files:"
+ls -la "$LIB_DIR" | head -10 >&2
+
 # 3. Export env vars (for GitHub Actions; harmless elsewhere)
 if [ -n "${GITHUB_ENV:-}" ]; then
   echo "OHOS_NDK_ROOT=$OHOS_NDK_ROOT" >> "$GITHUB_ENV"
   echo "OHOS_LLVM=$OHOS_NDK_ROOT/llvm-19/llvm" >> "$GITHUB_ENV"
-  echo "OHOS_SYSROOT=$OHOS_NDK_ROOT/llvm-19/ohos-sysroot" >> "$GITHUB_ENV"
+  echo "OHOS_SYSROOT=$SYSROOT" >> "$GITHUB_ENV"
+  echo "OHOS_LIB_DIR=$LIB_DIR" >> "$GITHUB_ENV"
   echo "OHOS_SIGN_TOOL=$OHOS_NDK_ROOT/ohos-sdk/linux/toolchains/lib/binary-sign-tool" >> "$GITHUB_ENV"
   # Build IDs for traceability
   echo "OHOS_SDK_BUILD_ID=$SDK_BUILD_ID" >> "$GITHUB_ENV"
@@ -65,5 +86,6 @@ fi
 
 echo "OHOS NDK setup complete:"
 echo "  OHOS_LLVM=$OHOS_NDK_ROOT/llvm-19/llvm"
-echo "  OHOS_SYSROOT=$OHOS_NDK_ROOT/llvm-19/ohos-sysroot"
+echo "  OHOS_SYSROOT=$SYSROOT"
+echo "  OHOS_LIB_DIR=$LIB_DIR"
 echo "  OHOS_SIGN_TOOL=$OHOS_NDK_ROOT/ohos-sdk/linux/toolchains/lib/binary-sign-tool"
