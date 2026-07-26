@@ -66,9 +66,15 @@ module Libpng
       opts << '-DCMAKE_BUILD_TYPE=Release'
       # OHOS NDK cross-compile: point CMake at the OHOS toolchain file
       # set up by setup_cross_compile. The toolchain file points at
-      # the OHOS clang + sysroot.
+      # the OHOS clang + sysroot. Also explicitly pass zlib (libpng's
+      # only required dependency) since CMake's FindZLIB can't auto-
+      # discover it in OHOS's non-standard sysroot layout.
       if target_platform == 'aarch64-linux-ohos' && ENV['OHOS_TOOLCHAIN_FILE']
-        opts << "-DCMAKE_TOOLCHAIN_FILE=#{ENV['OHOS_TOOLCHAIN_FILE']}"
+        opts << "-DCMAKE_TOOLCHAIN_FILE=#{ENV.fetch('OHOS_TOOLCHAIN_FILE', nil)}"
+        if ENV.fetch('OHOS_ZLIB_LIBRARY', nil)
+          opts << "-DZLIB_LIBRARY=#{ENV.fetch('OHOS_ZLIB_LIBRARY', nil)}"
+          opts << "-DZLIB_INCLUDE_DIR=#{ENV.fetch('OHOS_ZLIB_INCLUDE_DIR', nil)}"
+        end
       end
       opts
     end
