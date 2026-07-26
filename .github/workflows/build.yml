@@ -185,6 +185,13 @@ jobs:
             gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
             (cd /tmp/ohos-smoke/libpng-* && \
               ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+
+            # Build the cross-platform smoke test that dockerharmony will
+            # run. Compiled here (in Alpine, where we have gcc + libpng
+            # headers) and run in the next workflow step inside the
+            # dockerharmony container (real OHOS userland).
+            apk add --no-cache gcc musl-dev
+            sh /work/ext/ohos/verify-prepare.sh
             ;;
           *)
             gem install -b pkg/libpng-*.gem
@@ -204,6 +211,28 @@ jobs:
           -e PLATFORM \
           ruby:${RUBY_VERSION}-alpine \
           /alpine-build.sh
+
+    # OHOS verification: real userland test via dockerharmony.
+    # The Alpine-built .so + smoke-test binary are aarch64-linux-musl,
+    # which the dockerharmony image's OHOS rootfs runs natively.
+    # If this passes, we have empirical proof the bytes work in OHOS,
+    # not just an assumption based on matching dynamic linker paths.
+    - name: Verify in dockerharmony (OHOS userland)
+      if: matrix.platform == 'aarch64-linux-ohos'
+      shell: bash
+      run: |
+        # Pull the dockerharmony image (cached on the arm64 runner).
+        docker pull ghcr.io/hqzing/dockerharmony:latest
+
+        # Run the smoke-test binary + .so inside the OHOS userland.
+        # LD_LIBRARY_PATH=. lets the binary find libpng16.so + libz.so
+        # next to itself (rpath=$ORIGIN also helps but doesn't always
+        # work for transitive deps under musl).
+        docker run --rm \
+          -v "$PWD/ohos-verify:/work" \
+          -w /work \
+          ghcr.io/hqzing/dockerharmony:latest \
+          sh -c 'LD_LIBRARY_PATH=. ./smoke-test'
 
     - uses: actions/upload-artifact@v4
       with:

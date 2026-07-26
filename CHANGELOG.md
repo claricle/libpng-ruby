@@ -7,6 +7,52 @@ This gem follows a `{LIBPNG_VERSION}.{LIBPNG_RUBY_ITERATION}` version
 scheme. `LIBPNG_VERSION` is the upstream libpng release; `ITERATION`
 bumps for Ruby-side changes and resets to 0 when LIBPNG_VERSION bumps.
 
+## [1.6.58.6] - 2026-07-26
+
+### Changed
+- **OHOS (`aarch64-linux-ohos`) verification is now done in real OHOS
+  userland** via the [`dockerharmony`](https://github.com/hqzing/dockerharmony)
+  container, rather than relying on the unverified assumption that
+  Alpine-built musl arm64 bytes are byte-compatible with OHOS.
+
+  The build itself is unchanged from 1.6.58.4/.5: libpng is built in
+  the Alpine container on an arm64 runner, producing an aarch64-linux-musl
+  binary. What's new is the verification step -- the freshly built `.so`
+  is now copied into a dockerharmony container (real OHOS mini rootfs:
+  musl + toybox + mksh), a smoke-test binary that round-trips a PNG
+  encode/decode runs there, and the build only passes if the smoke test
+  succeeds inside OHOS userland.
+
+  This replaces the OHOS NDK cross-compile attempt (PR #11, closed)
+  that was hitting repeated issues with sysroot layout, missing zlib
+  in the OHOS sysroot, and CMake cross-compile quirks. The dockerharmony
+  path is much simpler -- no NDK download, no toolchain file, no
+  cross-compile -- AND provides stronger empirical verification (real
+  OHOS userland vs qemu emulation).
+
+### Added
+- `ext/ohos/smoke-test.c` -- minimal libpng round-trip test (encode ->
+  decode -> byte comparison).
+- `ext/ohos/verify-prepare.sh` -- compiles the smoke test against the
+  freshly built `.so` inside the Alpine container, producing a tarball
+  of artifacts (smoke-test binary + libpng16.so + libz.so) for
+  dockerharmony to run.
+- New `Verify in dockerharmony (OHOS userland)` step in `build.yml`
+  and `release.yml`'s `build_musl` matrix, gated on `platform ==
+  'aarch64-linux-ohos'`.
+
+### Caveats
+- The 1.6.58.4/.5 OHOS gems shipped the same Alpine-built bytes WITHOUT
+  the dockerharmony verification. Those versions may or may not have
+  worked on real OHOS hardware; this version is the first with empirical
+  CI evidence that the bytes load and round-trip in OHOS userland.
+- Code signing is still NOT applied. OHOS requires code signing for
+  runtime loading on real devices; dockerharmony skips this check (it's
+  a dev container). Users running on actual OHOS hardware may need to
+  sign the `.so` themselves (`binary-sign-tool sign -selfSign 1`) before
+  it will load. A future release may add automatic signing if a real
+  OHOS hardware user reports breakage.
+
 ## [1.6.58.5] - 2026-07-26
 
 ### Added

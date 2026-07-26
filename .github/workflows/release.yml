@@ -232,6 +232,10 @@ jobs:
               gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
               (cd /tmp/ohos-smoke/libpng-* && \
                 ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
+
+              # Cross-platform smoke test that dockerharmony will run.
+              apk add --no-cache gcc musl-dev
+              sh /work/ext/ohos/verify-prepare.sh
               ;;
             *)
               gem install -b pkg/libpng-*.gem
@@ -247,6 +251,20 @@ jobs:
             -e PLATFORM \
             ruby:3.3-alpine \
             /alpine-build.sh
+
+      # OHOS verification: real userland test via dockerharmony.
+      # The Alpine-built .so + smoke-test binary are aarch64-linux-musl,
+      # which the dockerharmony image's OHOS rootfs runs natively.
+      - name: Verify in dockerharmony (OHOS userland)
+        if: matrix.platform == 'aarch64-linux-ohos'
+        shell: bash
+        run: |
+          docker pull ghcr.io/hqzing/dockerharmony:latest
+          docker run --rm \
+            -v "$PWD/ohos-verify:/work" \
+            -w /work \
+            ghcr.io/hqzing/dockerharmony:latest \
+            sh -c 'LD_LIBRARY_PATH=. ./smoke-test'
 
       - uses: actions/upload-artifact@v4
         with:

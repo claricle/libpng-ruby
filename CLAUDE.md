@@ -31,6 +31,8 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 | `lib/libpng/text_writer.rb` | `Libpng::TextWriter` + `Libpng::TextEntry` (builds png_text struct array, calls `png_set_text`) |
 | `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem) |
 | `ext/extconf.rb` | Gem extension entry. Triggers `Libpng::Recipe` autoload via `require 'libpng'`, then emits a dummy Makefile |
+| `ext/ohos/smoke-test.c` | Minimal libpng round-trip test, run inside the dockerharmony container to verify OHOS compatibility |
+| `ext/ohos/verify-prepare.sh` | Compiles `smoke-test.c` against the freshly built `.so` (in Alpine), producing artifacts dockerharmony consumes |
 
 ### Public API
 

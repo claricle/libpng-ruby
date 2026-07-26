@@ -44,7 +44,7 @@ for the current set):
 | `x86_64-linux-musl` | x86_64 Linux (musl, e.g. Alpine) | `ruby:<ver>-alpine` on x86_64
 | `aarch64-linux` | ARM64 Linux (glibc) | `ubuntu-24.04-arm` (native)
 | `aarch64-linux-musl` | ARM64 Linux (musl) | `ruby:<ver>-alpine` on arm64
-| `aarch64-linux-ohos` | ARM64 OpenHarmony / Huawei HarmonyOS PC | `ruby:<ver>-alpine` on arm64 (byte-compatible with `aarch64-linux-musl`)
+| `aarch64-linux-ohos` | ARM64 OpenHarmony / Huawei HarmonyOS PC | `ruby:<ver>-alpine` on arm64, **verified in dockerharmony** (real OHOS userland)
 | `x64-mingw32` | x64 Windows, RubyInstaller < 3.0 (MSVCRT) | `windows-latest`
 | `x64-mingw-ucrt` | x64 Windows, RubyInstaller >= 3.0 (UCRT) | `windows-latest`
 | `aarch64-mingw-ucrt` | ARM64 Windows (Ruby >= 3.4) | `windows-11-arm` (native)
