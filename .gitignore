@@ -12,6 +12,8 @@
 /lib/libpng/*.so.*
 /lib/libpng/*.dylib
 /lib/libpng/*.dll
+/Makefile
+/lib/libpng/Makefile
 /.idea/
 /.vscode/
 *.gem

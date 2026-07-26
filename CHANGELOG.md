@@ -7,6 +7,34 @@ This gem follows a `{LIBPNG_VERSION}.{LIBPNG_RUBY_ITERATION}` version
 scheme. `LIBPNG_VERSION` is the upstream libpng release; `ITERATION`
 bumps for Ruby-side changes and resets to 0 when LIBPNG_VERSION bumps.
 
+## [1.6.58.4] - 2026-07-26
+
+### Added
+- `Libpng::ChunkWalker#text_chunks` -- parses `tEXt`, `zTXt`, and `iTXt`
+  chunks into a flat Hash of keyword -> UTF-8 String. zTXt values are
+  zlib-inflated; tEXt/zTXt values are transcoded from Latin-1 to UTF-8;
+  iTXt values stay UTF-8 (with optional compression). Malformed chunks
+  are silently skipped so a single broken entry doesn't poison the rest
+  of the decode.
+- `Libpng::ChunkWalker#color_chunks` -- parses `gAMA`, `cHRM`, `sRGB`,
+  and `iCCP` chunks into a Hash with Symbol keys (`:gamma`,
+  `:white_point_x/y`, `:red_x/y`, `:green_x/y`, `:blue_x/y`,
+  `:srgb_intent`, `:icc_profile_name`, `:icc_profile`). iCCP profiles
+  are zlib-decompressed into raw binary bytes for downstream ICC
+  libraries.
+- `Libpng::DecodedImage#text` and `#color` -- new keyword Struct fields,
+  populated by `Libpng.decode` via the new ChunkWalker accessors. Both
+  default to an empty Hash when the source PNG has no relevant chunks.
+- New platform: `aarch64-linux-ohos` (OpenHarmony / Huawei HarmonyOS PC).
+  OHOS is musl-based arm64 -- the resulting shared library is
+  byte-compatible with `aarch64-linux-musl`; only the gem's platform
+  label differs so RubyGems on OHOS selects the right variant. Built in
+  the same Alpine container as the musl gem.
+- Specs: 24 new specs across `spec/text_chunk_spec.rb` and
+  `spec/color_metadata_spec.rb` covering all 7 chunk types, malformed
+  input handling, Ractor moving, and end-to-end metadata exposure on
+  `DecodedImage`.
+
 ## [1.6.58.3] - 2026-07-26
 
 ### Added

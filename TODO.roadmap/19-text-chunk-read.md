@@ -1,7 +1,7 @@
 # 19 - Text chunk (tEXt/zTXt/iTXt) read support
 
 - **Priority**: P2
-- **Status**: Planned
+- **Status**: Done
 
 ## Context
 

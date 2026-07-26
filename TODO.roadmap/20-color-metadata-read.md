@@ -1,7 +1,7 @@
 # 20 - Color metadata read (gAMA/cHRM/sRGB/iCCP)
 
 - **Priority**: P2
-- **Status**: Planned
+- **Status**: Done
 
 ## Context
 
