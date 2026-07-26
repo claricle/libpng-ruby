@@ -201,10 +201,6 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
-          # OHOS: same Alpine-built musl arm64 binary as aarch64-linux-musl,
-          # packaged under a distinct platform label.
-          - os: ubuntu-24.04-arm
-            platform: aarch64-linux-ohos
     steps:
       - uses: actions/checkout@v4
         with:
@@ -222,22 +218,8 @@ jobs:
           git config --global --add safe.directory /work
           bundle install --jobs 4
           bundle exec rake "gem:native:${PLATFORM}"
-          case "${PLATFORM}" in
-            *-ohos)
-              # OHOS gem is labeled aarch64-linux-ohos so RubyGems on OHOS
-              # selects it, but Alpine Ruby reports *-linux-musl. The .so
-              # inside is musl-compatible -- unpack and load via -Ilib to
-              # verify the binary without going through RubyGems install.
-              mkdir -p /tmp/ohos-smoke
-              gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
-              (cd /tmp/ohos-smoke/libpng-* && \
-                ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-              ;;
-            *)
-              gem install -b pkg/libpng-*.gem
-              (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-              ;;
-          esac
+          gem install -b pkg/libpng-*.gem
+          (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
           BUILD_EOF
           chmod +x /tmp/alpine-build.sh
           docker run --rm \
@@ -253,8 +235,67 @@ jobs:
           name: pkg-${{ matrix.platform }}
           path: pkg/*.gem
 
+  # OHOS NDK cross-compile. See build.yml's build_ohos job for full notes.
+  build_ohos:
+    needs: bump
+    if: always() && !cancelled() && !failure() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install build tools + qemu-user-static
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip \
+                                   qemu-user-static binfmt-support
+
+      - name: Register binfmt for x86_64 (NDK binaries are x86_64 ELF)
+        run: |
+          sudo update-binfmts --enable qemu-x86_64 || true
+          docker run --rm --platform linux/amd64 alpine:latest echo "binfmt ok"
+
+      - name: Cache OHOS NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ext/ohos/ndk
+          key: ohos-ndk-arm64-${{ hashFiles('ext/ohos/setup-ndk.sh') }}
+
+      - name: Setup OHOS NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: sh ext/ohos/setup-ndk.sh --prefix ext/ohos/ndk
+
+      - name: Build OHOS gem (libpng + static zlib + signing)
+        run: bundle exec rake gem:native:aarch64-linux-ohos
+        env:
+          target_platform: aarch64-linux-ohos
+
+      - name: Prepare dockerharmony artifacts
+        run: NDK_ROOT=$PWD/ext/ohos/ndk sh ext/ohos/verify-prepare.sh
+
+      - name: Verify in dockerharmony (real OHOS userland)
+        run: |
+          docker pull ghcr.io/hqzing/dockerharmony:latest
+          docker run --rm \
+            -v "$PWD/ohos-verify:/work" \
+            -w /work \
+            ghcr.io/hqzing/dockerharmony:latest \
+            sh -c 'LD_LIBRARY_PATH=. ./smoke-test'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-aarch64-linux-ohos
+          path: pkg/*.gem
+
   publish:
-    needs: [ bump, build, build_musl ]
+    needs: [ bump, build, build_musl, build_ohos ]
     if: always() && !cancelled() && !failure()
     runs-on: ubuntu-latest
     steps:
