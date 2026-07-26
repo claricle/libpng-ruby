@@ -24,12 +24,11 @@ RSpec.describe Libpng, 'benchmarks' do
     bytes
   end
 
-  def bench(label, iterations: 50, &block)
-    require 'benchmark'
-    times = []
-    iterations.times do
-      t = Benchmark.realtime(&block)
-      times << t
+  def bench(label, iterations: 50)
+    times = Array.new(iterations) do
+      t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      yield
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0
     end
     median = times.sort[times.length / 2]
     "#{label} median=#{(median * 1000).round(3)}ms (#{iterations} iters)"
