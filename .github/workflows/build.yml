@@ -182,7 +182,7 @@ jobs:
             # unpack the gem and load it via -Ilib directly to verify
             # the binary works without going through RubyGems install.
             mkdir -p /tmp/ohos-smoke
-            gem unpack "pkg/libpng-*.gem" --target /tmp/ohos-smoke
+            gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
             (cd /tmp/ohos-smoke/libpng-* && \
               ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
             ;;
