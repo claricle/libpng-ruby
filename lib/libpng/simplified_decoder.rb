@@ -28,7 +28,7 @@ module Libpng
 
       FFI::MemoryPointer.new(:uint8, @png.bytesize) do |in_buf|
         in_buf.write_bytes(@png)
-        ok = Libpng.png_image_begin_read_from_memory(img, in_buf, @png.bytesize)
+        ok = Libpng::Binding.png_image_begin_read_from_memory(img, in_buf, @png.bytesize)
         raise Error, "png_image_begin_read_from_memory failed: #{read_message(img)}" if ok.zero?
 
         img.put_uint32(PNG_IMAGE_OFF_FORMAT, fmt)
@@ -38,7 +38,7 @@ module Libpng
         out_size = stride * height
 
         FFI::MemoryPointer.new(:uint8, out_size) do |out_buf|
-          ok = Libpng.png_image_finish_read(img, nil, out_buf, stride, nil)
+          ok = Libpng::Binding.png_image_finish_read(img, nil, out_buf, stride, nil)
           raise Error, "png_image_finish_read failed: #{read_message(img)}" if ok.zero?
 
           pixels = out_buf.read_bytes(out_size)
@@ -55,7 +55,7 @@ module Libpng
         end
       end
     ensure
-      Libpng.png_image_free(img) unless img.nil? || img.null?
+      Libpng::Binding.png_image_free(img) unless img.nil? || img.null?
     end
 
     private

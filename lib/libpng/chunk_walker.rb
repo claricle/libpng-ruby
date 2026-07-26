@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'stringio'
+require 'zlib'
 
 module Libpng
   # Walks a PNG byte buffer chunk-by-chunk. Used to strip ancillary

@@ -62,12 +62,12 @@ module Libpng
 
       stride = @width * bytes_per_pixel
       out_len_ptr = FFI::MemoryPointer.new(:size_t, 1)
-      ok = Libpng.png_image_write_to_memory(img, nil, out_len_ptr,
-                                            @convert_to_8bit ? 1 : 0,
-                                            @pixels, stride, nil)
+      ok = Libpng::Binding.png_image_write_to_memory(img, nil, out_len_ptr,
+                                                     @convert_to_8bit ? 1 : 0,
+                                                     @pixels, stride, nil)
       if ok.zero?
         msg = read_message(img)
-        Libpng.png_image_free(img)
+        Libpng::Binding.png_image_free(img)
         raise Error, "png_image_write_to_memory (size query) failed: #{msg}"
       end
 
@@ -75,16 +75,16 @@ module Libpng
       raise Error, 'libpng reported zero-length PNG output' if out_len.zero?
 
       buffer = FFI::MemoryPointer.new(:uint8, out_len)
-      ok = Libpng.png_image_write_to_memory(img, buffer, out_len_ptr,
-                                            @convert_to_8bit ? 1 : 0,
-                                            @pixels, stride, nil)
+      ok = Libpng::Binding.png_image_write_to_memory(img, buffer, out_len_ptr,
+                                                     @convert_to_8bit ? 1 : 0,
+                                                     @pixels, stride, nil)
       if ok.zero?
         msg = read_message(img)
-        Libpng.png_image_free(img)
+        Libpng::Binding.png_image_free(img)
         raise Error, "png_image_write_to_memory (write) failed: #{msg}"
       end
 
-      buffer.read_bytes(out_len).tap { Libpng.png_image_free(img) }
+      buffer.read_bytes(out_len).tap { Libpng::Binding.png_image_free(img) }
     end
 
     def read_message(img)

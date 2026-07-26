@@ -48,17 +48,17 @@ module Libpng
       png_ptr = FFI::Pointer.new(0)
       info_ptr = FFI::Pointer.new(0)
       begin
-        png_ptr = Libpng.png_create_write_struct(LIBPNG_VER_STRING_C, nil, callbacks.error_fn, nil)
+        png_ptr = Libpng::Binding.png_create_write_struct(LIBPNG_VER_STRING_C, nil, callbacks.error_fn, nil)
         raise Error, 'png_create_write_struct returned NULL' if png_ptr.null?
 
-        info_ptr = Libpng.png_create_info_struct(png_ptr)
+        info_ptr = Libpng::Binding.png_create_info_struct(png_ptr)
         raise Error, 'png_create_info_struct returned NULL' if info_ptr.null?
 
         apply_compression(png_ptr)
-        Libpng.png_set_write_fn(png_ptr, nil, callbacks.write_fn, nil)
-        Libpng.png_set_IHDR(png_ptr, info_ptr, @width, @height, effective_bit_depth,
-                            color_type, interlace_method,
-                            COMPRESSION_TYPE_DEFAULT, FILTER_TYPE_DEFAULT)
+        Libpng::Binding.png_set_write_fn(png_ptr, nil, callbacks.write_fn, nil)
+        Libpng::Binding.png_set_IHDR(png_ptr, info_ptr, @width, @height, effective_bit_depth,
+                                     color_type, interlace_method,
+                                     COMPRESSION_TYPE_DEFAULT, FILTER_TYPE_DEFAULT)
         apply_filter(png_ptr)
         apply_palette(png_ptr, info_ptr) if palette_format?
 
@@ -68,8 +68,8 @@ module Libpng
             @height.times do |y|
               rows.put_pointer(y * FFI.type_size(:pointer), px + (y * stride))
             end
-            Libpng.png_set_rows(png_ptr, info_ptr, rows)
-            Libpng.png_write_png(png_ptr, info_ptr, TRANSFORM_IDENTITY, nil)
+            Libpng::Binding.png_set_rows(png_ptr, info_ptr, rows)
+            Libpng::Binding.png_write_png(png_ptr, info_ptr, TRANSFORM_IDENTITY, nil)
           end
         end
 
@@ -179,12 +179,12 @@ module Libpng
     end
 
     def apply_compression(png_ptr)
-      Libpng.png_set_compression_level(png_ptr, @compression_level)
+      Libpng::Binding.png_set_compression_level(png_ptr, @compression_level)
     end
 
     def apply_filter(png_ptr)
       mask = FILTER_MASK_BY_NAME[@filter_sym]
-      Libpng.png_set_filter(png_ptr, FILTER_HEURISTIC_DEFAULT, mask) if mask
+      Libpng::Binding.png_set_filter(png_ptr, FILTER_HEURISTIC_DEFAULT, mask) if mask
     end
 
     def apply_palette(png_ptr, info_ptr)
@@ -193,14 +193,14 @@ module Libpng
       pal_bytes = pal.map { |e| e.first(3) }.flatten.pack('C*')
       FFI::MemoryPointer.new(:uint8, pal_bytes.bytesize) do |pp|
         pp.write_bytes(pal_bytes)
-        Libpng.png_set_PLTE(png_ptr, info_ptr, pp, pal.length)
+        Libpng::Binding.png_set_PLTE(png_ptr, info_ptr, pp, pal.length)
       end
       return unless has_alpha
 
       alpha_bytes = pal.map { |e| e[3] || 255 }.pack('C*')
       FFI::MemoryPointer.new(:uint8, alpha_bytes.bytesize) do |ap|
         ap.write_bytes(alpha_bytes)
-        Libpng.png_set_tRNS(png_ptr, info_ptr, ap, alpha_bytes.bytesize, nil)
+        Libpng::Binding.png_set_tRNS(png_ptr, info_ptr, ap, alpha_bytes.bytesize, nil)
       end
     end
 
@@ -211,7 +211,7 @@ module Libpng
         pp.write_pointer(png_ptr)
         FFI::MemoryPointer.new(:pointer) do |ip|
           ip.write_pointer(info_ptr)
-          Libpng.png_destroy_write_struct(pp, ip)
+          Libpng::Binding.png_destroy_write_struct(pp, ip)
         end
       end
     end

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'ffi'
-require 'zlib'
 
 # Libpng is a Ruby binding for libpng (the official PNG reference library)
 # via FFI. The native library is pre-compiled for each target platform and
@@ -14,8 +13,9 @@ require 'zlib'
 #
 # All encode/decode state is per-call. Each call constructs a dedicated
 # encoder or decoder instance, runs it, and discards it. Calls from
-# different Ractors do not share state. The module's FFI function table
-# is set up once at load time and is shareable across Ractors.
+# different Ractors do not share state. The FFI function table
+# (Libpng::Binding) loads lazily on first use and is shareable across
+# Ractors.
 module Libpng
   # Version constants live in lib/libpng/version.rb. Autoloaded so the
   # version file isn't loaded until someone references a version constant.
@@ -32,52 +32,15 @@ module Libpng
   autoload :SimplifiedDecoder, 'libpng/simplified_decoder'
   autoload :StandardEncoder, 'libpng/standard_encoder'
 
+  # FFI bindings. Autoloaded so that requiring `libpng` is cheap and
+  # does not dlopen libpng16.{so,dylib,dll} -- ext/extconf.rb needs to
+  # require 'libpng' to access Libpng::Recipe during the source-gem
+  # build, at which point the shared library doesn't exist yet.
+  autoload :Binding, 'libpng/binding'
+
   # Build-time recipe (MiniPortile). Only loaded when ext/extconf.rb
   # is invoked during `gem install` of the source ('ruby' platform) gem.
   autoload :Recipe, 'libpng/recipe'
-
-  extend FFI::Library
-
-  ffi_lib_flags :now, :global
-
-  lib_filename = if FFI::Platform.windows?
-                   'libpng16.dll'
-                 elsif FFI::Platform.mac?
-                   'libpng16.dylib'
-                 else
-                   'libpng16.so'
-                 end
-
-  ffi_lib File.expand_path("libpng/#{lib_filename}", __dir__)
-              .gsub('/', File::ALT_SEPARATOR || File::SEPARATOR)
-
-  # libpng simplified API (png_image / png_image_*). All return int
-  # (1 on success, 0 on failure); the png_image's message buffer holds
-  # the error string on failure.
-  attach_function :png_image_begin_read_from_memory,
-                  %i[pointer pointer size_t], :int
-  attach_function :png_image_finish_read,
-                  %i[pointer pointer pointer int pointer], :int
-  attach_function :png_image_write_to_memory,
-                  %i[pointer pointer pointer int pointer int pointer], :int
-  attach_function :png_image_free, [:pointer], :void
-
-  # libpng standard (non-simplified) write API. Used by StandardEncoder.
-  attach_function :png_create_write_struct,
-                  %i[string pointer pointer pointer], :pointer
-  attach_function :png_create_info_struct, [:pointer], :pointer
-  attach_function :png_destroy_write_struct, %i[pointer pointer], :void
-  attach_function :png_set_IHDR,
-                  %i[pointer pointer uint32 uint32 int int int int int], :void
-  attach_function :png_set_rows, %i[pointer pointer pointer], :void
-  attach_function :png_set_PLTE, %i[pointer pointer pointer int], :void
-  attach_function :png_set_tRNS,
-                  %i[pointer pointer pointer int pointer], :void
-  attach_function :png_set_filter, %i[pointer int int], :void
-  attach_function :png_set_compression_level, %i[pointer int], :void
-  attach_function :png_set_write_fn,
-                  %i[pointer pointer pointer pointer], :void
-  attach_function :png_write_png, %i[pointer pointer int pointer], :void
 
   # ------------------------------------------------------------------
   # PNG_IMAGE_FORMAT_* bit flags (png.h). Used by the simplified API.
@@ -126,8 +89,6 @@ module Libpng
   COLOR_TYPE_RGB_ALPHA    = COLOR_MASK_COLOR | COLOR_MASK_ALPHA
   COLOR_TYPE_GRAY_ALPHA   = COLOR_MASK_ALPHA
 
-  # Symbolic names accepted by StandardEncoder. Symbol keys so callers
-  # can pass `pixel_format: :palette` or `'RGBA'` interchangeably.
   FORMAT_TO_COLOR_TYPE = {
     gray: COLOR_TYPE_GRAY,
     ga: COLOR_TYPE_GRAY_ALPHA,
@@ -153,14 +114,6 @@ module Libpng
 
   # ------------------------------------------------------------------
   # png_set_filter bitmask (PNG_FILTER_*).
-  #
-  # Note: :default means "don't call png_set_filter at all" -- libpng
-  # uses its built-in adaptive filtering (all filters considered,
-  # minimum-sum-of-absolute-differences per row). :adaptive and :all
-  # explicitly call png_set_filter with FILTER_ALL; the output is
-  # byte-identical to :default in practice but exercises a different
-  # code path inside libpng. :none forces PNG_FILTER_NONE only, which
-  # usually produces a larger IDAT for non-trivial images.
   # ------------------------------------------------------------------
   FILTER_HEURISTIC_DEFAULT  = 0
   FILTER_NONE               = 0x08
@@ -184,24 +137,14 @@ module Libpng
   # PNG_LIBPNG_VER_STRING. The C string passed as `user_png_ver` to
   # png_create_write_struct. libpng checks this against its compiled-in
   # version; mismatches return NULL. Must match the libpng16 binary we
-  # ship, which is 1.6.58. LIBPNG_VERSION is the autoloaded constant
-  # from lib/libpng/version.rb (frozen string literal).
+  # ship, which is 1.6.58.
   LIBPNG_VER_STRING_C = LIBPNG_VERSION
 
   # ------------------------------------------------------------------
-  # png_image struct field offsets (bytes). png_image is laid out as:
-  #   void*       opaque             (pointer-width)
-  #   png_uint_32 version            (uint32)
-  #   png_uint_32 width              (uint32)
-  #   png_uint_32 height             (uint32)
-  #   png_uint_32 format             (uint32)
-  #   png_uint_32 flags              (uint32)
-  #   png_uint_32 colormap_entries   (uint32)
-  #   png_uint_32 warning_or_error   (uint32)
-  #   char[64]    message
-  # The fixed width makes it safe to allocate via FFI::MemoryPointer
-  # directly so the wrapper stays Ractor-safe (FFI::Struct has class-
-  # level state that isn't shareable across non-main Ractors).
+  # png_image struct field offsets (bytes). Used by SimplifiedEncoder /
+  # SimplifiedDecoder to allocate the png_image struct via a raw
+  # FFI::MemoryPointer (rather than FFI::Struct, which has class-level
+  # state that isn't shareable across non-main Ractors).
   # ------------------------------------------------------------------
   PNG_IMAGE_VERSION = 1
   PNG_IMAGE_MESSAGE_BYTES = 64
