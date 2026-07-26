@@ -95,9 +95,18 @@ rm -rf ohos-sysroot.tar.gz
 cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
+# The SDK bundles a partial sysroot at ohos-sdk/linux/native/sysroot/
+# (missing arch-specific musl headers like bits/alltypes.h). The LLVM-19
+# tarball ships a more complete sysroot. Replace the SDK's partial sysroot
+# with a symlink to the LLVM-19 one so ohos.toolchain.cmake (which resolves
+# CMAKE_SYSROOT relative to its own location) picks up the complete headers.
+if [ -d "$PREFIX/llvm-19/sysroot/usr/include" ] && [ -d "$PREFIX/ohos-sdk/linux/native/sysroot" ]; then
+  rm -rf "$PREFIX/ohos-sdk/linux/native/sysroot"
+  ln -s "$PREFIX/llvm-19/sysroot" "$PREFIX/ohos-sdk/linux/native/sysroot"
+fi
 echo "setup-ndk: locating critical files..."
-find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name '*.cmake' \) -print | head -30
+find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name 'alltypes.h' \) -print | head -30
 echo "setup-ndk: ohos-sdk/linux/ listing:"
 ls "$PREFIX/ohos-sdk/linux" 2>&1 || true
-echo "setup-ndk: any 'native' dir?"
-find "$PREFIX/ohos-sdk" -type d -name native 2>&1 | head -5
+echo "setup-ndk: llvm-19/sysroot/usr/include/ listing:"
+ls "$PREFIX/llvm-19/sysroot/usr/include" 2>&1 | head -20 || true
