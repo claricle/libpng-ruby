@@ -7,6 +7,54 @@ This gem follows a `{LIBPNG_VERSION}.{LIBPNG_RUBY_ITERATION}` version
 scheme. `LIBPNG_VERSION` is the upstream libpng release; `ITERATION`
 bumps for Ruby-side changes and resets to 0 when LIBPNG_VERSION bumps.
 
+## [1.6.58.6] - 2026-07-26
+
+### Changed
+- **OHOS (`aarch64-linux-ohos`) is now cross-compiled with the proper
+  OpenHarmony NDK**, replacing the previous approach of shipping the
+  Alpine-built musl arm64 binary under the OHOS platform label.
+  The previous approach assumed byte-equivalence based solely on the
+  dynamic linker path matching (`/lib/ld-musl-aarch64.so.1`) -- an
+  unverified claim that ignored real ABI risks (musl patches, symbol
+  visibility, TLS layout, code signing).
+
+  The new path uses the OpenHarmony daily_build API
+  (`dcp.openharmony.cn/api/daily_build/build/list/component`) to fetch
+  `ohos-sdk-public` + `LLVM-19`. The OHOS NDK's clang
+  (`aarch64-unknown-linux-ohos-clang`) builds libpng against the OHOS
+  sysroot; the resulting `.so` is signed with OHOS's
+  `binary-sign-tool -selfSign 1` (mandatory for runtime loading).
+  Verified via qemu-aarch64 smoke test (round-trip encode/decode
+  through libpng's simplified API).
+
+  Reference: https://github.com/hqzing/ohos-node (build pattern).
+
+### Added
+- `ext/ohos/setup-toolchain.sh` -- downloads + extracts OHOS SDK +
+  LLVM-19 + sysroot via the OpenHarmony daily_build API.
+- `ext/ohos/toolchain.cmake` -- CMake cross-compile config.
+- `ext/ohos/smoke-test.c` + `smoke-test.sh` -- minimal C round-trip
+  test, run via qemu-aarch64 with the OHOS sysroot as
+  `QEMU_LD_PREFIX`.
+- New CI job `build_ohos` in `.github/workflows/build.yml` and
+  `release.yml`: runs on `ubuntu-latest`, sets up the OHOS NDK,
+  cross-compiles, signs the `.so`, runs the qemu smoke test.
+
+### Fixed
+- `lib/libpng/recipe.rb` `setup_cross_compile` hook is now actually
+  populated for OHOS (was previously an empty "seam" comment).
+
+### Caveats
+- The 1.6.58.4 and 1.6.58.5 `aarch64-linux-ohos` gems shipped with
+  Alpine-built bytes. They are superseded by 1.6.58.6's NDK build.
+  The Alpine-as-OHOS approach was an unverified assumption; whether
+  those binaries actually ran on OHOS hardware is unknown. If you
+  installed 1.6.58.4/.5 on OHOS and it worked, this version's
+  binary will differ but should be more correct. If it didn't work,
+  this version fixes it.
+- OHOS NDK is a moving target (daily builds). The build IDs are
+  logged in CI output for traceability but not pinned.
+
 ## [1.6.58.5] - 2026-07-26
 
 ### Added

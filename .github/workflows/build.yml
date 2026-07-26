@@ -143,13 +143,6 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
-          # OHOS (OpenHarmony / Huawei HarmonyOS PC) is musl-based arm64.
-          # Built inside the same Alpine container as aarch64-linux-musl;
-          # the resulting binary is byte-compatible. Only the gem's
-          # platform label differs so RubyGems on OHOS selects it.
-          - os: ubuntu-24.04-arm
-            platform: aarch64-linux-ohos
-
     steps:
     - uses: actions/checkout@v4
 
@@ -174,27 +167,12 @@ jobs:
         git config --global --add safe.directory /work
         bundle install --jobs 4
         bundle exec rake "gem:native:${PLATFORM}"
-        case "${PLATFORM}" in
-          *-ohos)
-            # OHOS gem is labeled aarch64-linux-ohos so RubyGems on OHOS
-            # selects it, but Alpine Ruby reports *-linux-musl -- a
-            # platform mismatch. The .so inside is musl-compatible, so
-            # unpack the gem and load it via -Ilib directly to verify
-            # the binary works without going through RubyGems install.
-            mkdir -p /tmp/ohos-smoke
-            gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
-            (cd /tmp/ohos-smoke/libpng-* && \
-              ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-            ;;
-          *)
-            gem install -b pkg/libpng-*.gem
-            # Smoke test from /tmp so bundler's source-tree LOAD_PATH doesn't
-            # shadow the installed gem. Activate via `gem` so RubyGems resolves
-            # the platform-specific binary gem (Alpine Ruby's platform string
-            # is *-linux-musl, which must match the gem's platform suffix).
-            (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-            ;;
-        esac
+        gem install -b pkg/libpng-*.gem
+        # Smoke test from /tmp so bundler's source-tree LOAD_PATH doesn't
+        # shadow the installed gem. Activate via `gem` so RubyGems resolves
+        # the platform-specific binary gem (Alpine Ruby's platform string
+        # is *-linux-musl, which must match the gem's platform suffix).
+        (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); File.binwrite("test.png", png); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
         BUILD_EOF
         chmod +x /tmp/alpine-build.sh
         docker run --rm \
@@ -208,4 +186,51 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: pkg-${{ matrix.platform }}
+        path: pkg/*.gem
+
+  build_ohos:
+    name: build aarch64-linux-ohos (OHOS NDK)
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install build tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build zlib1g-dev qemu-user-static unzip jq curl
+
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@master
+      with:
+        ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
+        bundler-cache: true
+
+    # Download OHOS SDK + LLVM-19 toolchain + sysroot via OpenHarmony's
+    # daily_build API. Output: OHOS_LLVM, OHOS_SYSROOT, OHOS_SIGN_TOOL,
+    # OHOS_NDK_ROOT env vars (written to $GITHUB_ENV by the script).
+    - name: Setup OHOS NDK
+      shell: bash
+      run: bash ext/ohos/setup-toolchain.sh
+
+    # Cross-compile libpng via the OHOS NDK. recipe.rb detects
+    # OHOS_LLVM/OHOS_SYSROOT and uses ext/ohos/toolchain.cmake.
+    - name: Build gem
+      run: bundle exec rake gem:native:aarch64-linux-ohos
+
+    # Smoke test: compile smoke-test.c with OHOS clang against the
+    # freshly-built libpng16.so, run under qemu-aarch64 with the OHOS
+    # sysroot as QEMU_LD_PREFIX. This verifies the .so loads and the
+    # simplified API round-trips correctly.
+    - name: qemu smoke test
+      shell: bash
+      run: bash ext/ohos/smoke-test.sh
+
+    - name: Verify .so format
+      shell: bash
+      run: file lib/libpng/libpng16.so
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: pkg-aarch64-linux-ohos
         path: pkg/*.gem

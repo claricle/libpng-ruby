@@ -201,10 +201,6 @@ jobs:
             platform: x86_64-linux-musl
           - os: ubuntu-24.04-arm
             platform: aarch64-linux-musl
-          # OHOS: same Alpine-built musl arm64 binary as aarch64-linux-musl,
-          # packaged under a distinct platform label.
-          - os: ubuntu-24.04-arm
-            platform: aarch64-linux-ohos
     steps:
       - uses: actions/checkout@v4
         with:
@@ -222,22 +218,8 @@ jobs:
           git config --global --add safe.directory /work
           bundle install --jobs 4
           bundle exec rake "gem:native:${PLATFORM}"
-          case "${PLATFORM}" in
-            *-ohos)
-              # OHOS gem is labeled aarch64-linux-ohos so RubyGems on OHOS
-              # selects it, but Alpine Ruby reports *-linux-musl. The .so
-              # inside is musl-compatible -- unpack and load via -Ilib to
-              # verify the binary without going through RubyGems install.
-              mkdir -p /tmp/ohos-smoke
-              gem unpack pkg/libpng-*.gem --target /tmp/ohos-smoke
-              (cd /tmp/ohos-smoke/libpng-* && \
-                ruby -Ilib -e 'require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-              ;;
-            *)
-              gem install -b pkg/libpng-*.gem
-              (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
-              ;;
-          esac
+          gem install -b pkg/libpng-*.gem
+          (cd /tmp && ruby -e 'gem "libpng"; require "libpng"; png = Libpng.encode(2, 2, "\xff" * 16, pixel_format: "RGBA"); puts Libpng.decode(png, pixel_format: "RGBA").inspect')
           BUILD_EOF
           chmod +x /tmp/alpine-build.sh
           docker run --rm \
@@ -253,8 +235,47 @@ jobs:
           name: pkg-${{ matrix.platform }}
           path: pkg/*.gem
 
+  build_ohos:
+    needs: bump
+    if: always() && !cancelled() && !failure() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build zlib1g-dev qemu-user-static unzip jq curl
+
+      - uses: ruby/setup-ruby@master
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Setup OHOS NDK
+        shell: bash
+        run: bash ext/ohos/setup-toolchain.sh
+
+      - name: Build gem
+        run: bundle exec rake gem:native:aarch64-linux-ohos
+
+      - name: qemu smoke test
+        shell: bash
+        run: bash ext/ohos/smoke-test.sh
+
+      - name: Verify .so format
+        shell: bash
+        run: file lib/libpng/libpng16.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-aarch64-linux-ohos
+          path: pkg/*.gem
+
   publish:
-    needs: [ bump, build, build_musl ]
+    needs: [ bump, build, build_musl, build_ohos ]
     if: always() && !cancelled() && !failure()
     runs-on: ubuntu-latest
     steps:

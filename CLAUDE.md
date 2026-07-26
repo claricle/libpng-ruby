@@ -29,8 +29,11 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 | `lib/libpng/standard_decoder.rb` | `Libpng::StandardDecoder` (libpng standard read API; explicit transform control) |
 | `lib/libpng/metadata_writer.rb` | `Libpng::MetadataWriter` (validates + writes text/gAMA/sRGB/cHRM/iCCP/pHYs onto a png_ptr/info_ptr pair) |
 | `lib/libpng/text_writer.rb` | `Libpng::TextWriter` + `Libpng::TextEntry` (builds png_text struct array, calls `png_set_text`) |
-| `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem) |
+| `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem; cross-compiles for OHOS via `ext/ohos/toolchain.cmake`) |
 | `ext/extconf.rb` | Gem extension entry. Triggers `Libpng::Recipe` autoload via `require 'libpng'`, then emits a dummy Makefile |
+| `ext/ohos/setup-toolchain.sh` | Downloads + extracts OHOS SDK + LLVM-19 + sysroot via OpenHarmony daily_build API |
+| `ext/ohos/toolchain.cmake` | CMake cross-compile config for OHOS NDK clang + sysroot |
+| `ext/ohos/smoke-test.{c,sh}` | Minimal libpng round-trip test, run via qemu-aarch64 to verify the cross-compiled `.so` loads |
 
 ### Public API
 

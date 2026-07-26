@@ -64,6 +64,12 @@ module Libpng
       # macOS: avoid the .framework build; we want a plain .dylib.
       opts << '-DCMAKE_INSTALL_LIBDIR=lib'
       opts << '-DCMAKE_BUILD_TYPE=Release'
+      # OHOS NDK cross-compile: point CMake at the OHOS toolchain file
+      # set up by setup_cross_compile. The toolchain file points at
+      # the OHOS clang + sysroot.
+      if target_platform == 'aarch64-linux-ohos' && ENV['OHOS_TOOLCHAIN_FILE']
+        opts << "-DCMAKE_TOOLCHAIN_FILE=#{ENV['OHOS_TOOLCHAIN_FILE']}"
+      end
       opts
     end
 
@@ -80,7 +86,29 @@ module Libpng
       FileUtils.mkdir_p(target_dir)
       FileUtils.cp_r(libs, target_dir, verbose: true)
 
+      # OHOS requires all executables and shared libraries to be code-
+      # signed before they can be loaded at runtime. The OHOS SDK ships
+      # binary-sign-tool; setup-toolchain.sh exposes its path via the
+      # OHOS_SIGN_TOOL env var. Without this, the .so won't load on a
+      # real OHOS device.
+      sign_ohos_libs if sign_ohos?
+
       verify_libs
+    end
+
+    def sign_ohos?
+      target_platform == 'aarch64-linux-ohos' && ENV.fetch('OHOS_SIGN_TOOL', nil)
+    end
+
+    def sign_ohos_libs
+      sign_tool = ENV.fetch('OHOS_SIGN_TOOL', nil)
+      each_built_lib do |path|
+        message("Signing OHOS lib #{path}...\n")
+        system(sign_tool, 'sign',
+               '-inFile', path, '-outFile', path,
+               '-selfSign', '1',
+               exception: true)
+      end
     end
 
     def verify_libs
@@ -175,11 +203,10 @@ module Libpng
         when /\A(arm64|aarch64).*linux-musl/
           'aarch64-linux-musl'
         when /\A(arm64|aarch64).*linux-ohos/
-          # OHOS (OpenHarmony / Huawei HarmonyOS PC) is musl-based arm64.
-          # The resulting binary is ELF64 aarch64 linked against musl,
-          # identical at the file-format level to aarch64-linux-musl --
-          # only the gem's platform label differs so RubyGems on OHOS
-          # selects the right variant.
+          # OHOS (OpenHarmony / Huawei HarmonyOS PC) target. The build
+          # itself is cross-compiled from x86_64 Linux using the OHOS
+          # NDK when OHOS_LLVM/OHOS_SYSROOT env vars are set (see
+          # ext/ohos/setup-toolchain.sh); see setup_cross_compile.
           'aarch64-linux-ohos'
         when /\A(arm64|aarch64).*linux/
           'aarch64-linux'
@@ -196,11 +223,19 @@ module Libpng
 
     # Configure MiniPortile + CMake for cross-compilation. Native builds
     # (host_platform == target_platform) skip this entirely.
+    #
+    # OHOS is the only target that actually cross-compiles today: the
+    # build host is x86_64 Ubuntu, the target is aarch64 OHOS. The
+    # OpenHarmony NDK (downloaded by ext/ohos/setup-toolchain.sh)
+    # provides the clang compiler + sysroot + binary-sign-tool.
     def setup_cross_compile
-      # All targeted platforms now have native runners (ubuntu-24.04-arm for
-      # aarch64-linux, windows-11-arm for aarch64-mingw-ucrt, Alpine containers
-      # for the musl variants). This hook is kept as a seam for future
-      # cross-compile targets (e.g. aarch64-linux on an x86_64 host).
+      return unless target_platform == 'aarch64-linux-ohos'
+      return unless ENV['OHOS_LLVM'] && ENV['OHOS_SYSROOT']
+
+      @host = 'aarch64-unknown-linux-ohos'
+      # Make CMake pick up our toolchain file when MiniPortile invokes
+      # it. configure_defaults appends the -DCMAKE_TOOLCHAIN_FILE flag.
+      ENV['OHOS_TOOLCHAIN_FILE'] = File.expand_path('ext/ohos/toolchain.cmake', ROOT)
     end
 
     def cpu_type
