@@ -250,13 +250,13 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
 
-      - name: Install build tools + x86_64 cross-libc (for NDK clang under qemu)
+      - name: Install build tools + x86_64 multiarch userland (for NDK clang under qemu)
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip \
-                                   libc6-amd64-cross
-          sudo mkdir -p /lib64
-          sudo ln -sf /usr/x86_64-linux-gnu/lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+          sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip
+          sudo dpkg --add-architecture amd64
+          sudo apt-get update
+          sudo apt-get install -y libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64
 
       - name: Register binfmt for x86_64 with fix-binary flag
         # See build.yml's build_ohos job for full notes.
