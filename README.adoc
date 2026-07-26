@@ -60,10 +60,13 @@ for the current set):
 
   # Decode a PNG into raw pixels.
   decoded = Libpng.decode(File.binread("out.png"), pixel_format: "RGBA")
-  decoded.width   # => Integer
-  decoded.height  # => Integer
-  decoded.format  # => "RGBA"
-  decoded.pixels  # => binary String of RGBA bytes
+  decoded.width       # => Integer
+  decoded.height      # => Integer
+  decoded.format      # => "RGBA"
+  decoded.pixels      # => binary String of RGBA bytes
+  decoded.bit_depth   # => 8 (from IHDR)
+  decoded.color_type  # => 6 (PNG_COLOR_TYPE_RGB_ALPHA, from IHDR)
+  decoded.interlace   # => 0 (PNG_INTERLACE_NONE, from IHDR)
 
 === Supported pixel formats
 
@@ -94,33 +97,47 @@ output. Set to `false` to keep the ancillary color chunks.
 For parity with libpng's classic write path -- the same code path used
 by `libemf2svg`'s `rgb2png` -- use `encode_standard` instead of
 `encode`. It calls `png_create_write_struct` + `png_set_IHDR` +
-`png_set_rows` + `png_write_png(PNG_TRANSFORM_IDENTITY)` directly, with
-filter and zlib-compression control exposed:
+`png_set_rows` + `png_write_png(PNG_TRANSFORM_IDENTITY)` directly.
 
   Libpng.encode_standard(width, height, pixels,
                          pixel_format: "RGBA",
                          filter: :default,
-                         compression_level: 6)
+                         compression_level: 6,
+                         interlace: :none,
+                         bit_depth: 8,
+                         palette: nil)
 
-`pixel_format`:: `GRAY`, `GA`, `RGB`, or `RGBA` only. The byte-order
-variants (`BGR`, `ARGB`, `BGRA`, `ABGR`) are simplified-API only --
-the standard API always emits host-order.
+`pixel_format`:: `:gray`, `:ga`, `:rgb`, `:rgba`, or `:palette`. The
+byte-order variants (`BGR`, `ARGB`, `BGRA`, `ABGR`) are simplified-API
+only -- the standard API always emits host-order.
 
-`filter`:: One of `:default` (adaptive -- libpng picks the best filter
-per row, the libemf2svg default), `:adaptive` (same), `:none`, `:sub`,
-`:up`, `:avg`, `:paeth`, or `:all`.
+`filter`:: `:default` (adaptive -- libpng picks the best filter per
+row, the libemf2svg default), `:adaptive` (same output, exercises a
+different libpng code path), `:none`, `:sub`, `:up`, `:avg`, `:paeth`,
+`:all`.
 
 `compression_level`:: zlib level 0-9. Default 6 (Z_DEFAULT_COMPRESSION,
 matching libemf2svg).
 
+`interlace`:: `:none` (default) or `:adam7`.
+
+`bit_depth`:: 8 (default) or 16. Only valid for `:gray`, `:rgb`,
+`:rgba`. 16-bit callers must provide 2 bytes per channel
+(host-order little-endian). Always 8 for `:palette`.
+
+`palette`:: Array of `[r, g, b]` or `[r, g, b, a]` (1..256 entries).
+Required when `pixel_format: :palette`. If any entry has alpha, a `tRNS`
+chunk is emitted.
+
 Output is written directly into a Ruby String via `png_set_write_fn` --
 no `Tempfile`, no disk I/O. The FFI write callback is held on a local
-Array so it survives the libpng calls.
+`Array` so it survives the libpng calls.
 
 Differences from `encode`:
 - Emits only `IHDR` / `IDAT` / `IEND` (no post-hoc chunk stripping
   needed).
-- Standard API only -- no `convert_to_8bit` option.
+- Supports palette, 16-bit, and interlaced output -- simplified API
+  doesn't.
 - Errors are raised via a `png_set_error_fn` callback (set on
   `png_create_write_struct`). libpng expects error callbacks to
   longjmp; we rb_raise instead, which unwinds the Ruby stack. The
