@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `libpng` is a Ruby gem that wraps the official libpng shared library via FFI. The native `libpng16.{so,dylib,dll}` is **pre-compiled per target platform and shipped inside the gem** — `gem install libpng` must not require a C compiler on the host.
 
-10 platform gems are published per release (see README for the full matrix: `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `aarch64-linux-ohos`, `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-darwin`, `arm64-darwin`).
+11 platform gems are published per release (10 native + the source `ruby` gem). Native targets: `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `aarch64-linux-ohos`, `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-darwin`, `arm64-darwin`.
 
 ## Architecture
 
@@ -106,6 +106,5 @@ The workflow bumps `lib/libpng/version.rb`, pushes a `v*` tag, builds all 11 pla
 
 ## See also
 
-- `TODO.roadmap/` — prioritized backlog with status (done/planned/wontdo) per item
 - `CHANGELOG.md` — release history
 - `REPORT-complex-api-needs.md` — historical report that drove `encode_standard`

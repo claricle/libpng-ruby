@@ -31,8 +31,9 @@ source tarball at install time and compiles it via CMake (requires
 
 == Supported platforms
 
-The following pre-compiled platform gems are published for each release
-(see the link:https://rubygems.org/gems/libpng/versions[RubyGems versions page]
+The following 11 pre-compiled platform gems are published for each
+release -- 10 native targets plus the platform-agnostic source (`ruby`)
+gem (see the link:https://rubygems.org/gems/libpng/versions[RubyGems versions page]
 for the current set):
 
 [cols="1,1,3", options="header"]
