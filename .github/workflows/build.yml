@@ -206,19 +206,26 @@ jobs:
         ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
         bundler-cache: true
 
-    - name: Install build tools + qemu-user-static
+    - name: Install build tools + x86_64 cross-libc (for NDK clang under qemu)
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip
+        sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip \
+                                 libc6-amd64-cross
+        # The NDK's clang + binary-sign-tool are x86_64 ELF. On the arm64
+        # host they run via qemu-user-static, which needs to find the x86_64
+        # dynamic loader at /lib64/ld-linux-x86-64.so.2. libc6-amd64-cross
+        # installs it at /usr/x86_64-linux-gnu/lib/ld-linux-x86-64.so.2;
+        # symlink it into place so qemu-user-static can resolve it.
+        sudo mkdir -p /lib64
+        sudo ln -sf /usr/x86_64-linux-gnu/lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
 
     - name: Register binfmt for x86_64 with fix-binary flag
-      # The NDK's clang + binary-sign-tool are x86_64 ELF. They run on the
-      # arm64 host via binfmt_misc + qemu-user-static. The fix-binary (F)
-      # flag is required so the kernel can run x86_64 DYNAMIC binaries
-      # (which need their own /lib64/ld-linux-x86-64.so.2 interpreter,
-      # not the host's). update-binfmts doesn't set F; tonistiigi/binfmt
-      # does. Without F, clang fails with "Could not open
-      # /lib64/ld-linux-x86-64.so.2".
+      # The F flag embeds the qemu binary into binfmt_misc at registration
+      # time so dynamic x86_64 ELF binaries can run transparently on the
+      # arm64 host. Without F, the kernel tries to use the host's
+      # /lib64/ld-linux-x86-64.so.2 (which doesn't exist on arm64 Ubuntu).
+      # Combined with the libc6-amd64-cross symlink above, this lets the
+      # NDK clang exec without "Could not open /lib64/ld-linux-x86-64.so.2".
       run: docker run --privileged --rm tonistiigi/binfmt --install amd64
 
     - name: Cache OHOS NDK
