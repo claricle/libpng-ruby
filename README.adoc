@@ -96,12 +96,13 @@ allocates and frees its own libpng `png_image`; no shared mutable state
 exists on the Ruby side. Calls from multiple Ractors run concurrently
 without locking.
 
-Example:
+Example (Ruby 3.x uses `Ractor#take`; Ruby 4.0+ uses `Ractor#value`):
 
   r = Ractor.new do
     Libpng.encode(2, 2, "\xFF" * 16, pixel_format: "RGBA")
   end
-  r.take  # => PNG binary
+  r.take   # Ruby 3.x
+  r.value  # Ruby 4.0+ (Ractor#take was removed in 4.0)
 
 == Versioning
 
