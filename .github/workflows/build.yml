@@ -201,36 +201,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: ruby/setup-ruby@master
-      with:
-        ruby-version: ${{ needs.prepare.outputs.default-ruby-version }}
-        bundler-cache: true
-
-    - name: Install build tools + x86_64 multiarch userland (for NDK clang under qemu)
+    - name: Install host-side tools
+      # These are used for: NDK setup (curl/jq/unzip), artifact prep
+      # (file), and dockerharmony verification (docker is preinstalled).
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip
+        sudo apt-get install -y curl jq unzip file
 
-        # The NDK's clang + binary-sign-tool are x86_64 ELF. On the arm64
-        # host they run via qemu-user-static, which needs the full x86_64
-        # userland (loader, libc, libstdc++, libpthread, libgcc_s) -- not
-        # just the dynamic loader.
-        #
-        # Debian multiarch installs these alongside the arm64 versions:
-        # libc:amd64 lives at /lib/x86_64-linux-gnu/, and the loader is
-        # symlinked at /lib64/ld-linux-x86-64.so.2 by the package. This is
-        # more complete than libc6-amd64-cross (which only ships libc and
-        # not libstdc++/libpthread).
-        sudo dpkg --add-architecture amd64
-        sudo apt-get update
-        sudo apt-get install -y libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64
-
-    - name: Register binfmt for x86_64 with fix-binary flag
-      # F flag embeds qemu into binfmt_misc at registration time so dynamic
-      # x86_64 ELF binaries run transparently on the arm64 host. Combined
-      # with the multiarch userland above, this lets the NDK clang exec
-      # without "Could not open /lib64/ld-linux-x86-64.so.2" or
-      # "cannot open shared object file: libpthread.so.0".
+    - name: Register binfmt for amd64 docker emulation
+      # The OHOS NDK is x86_64-only. We run the entire build inside an
+      # amd64 docker container on this arm64 host -- docker's binfmt_misc
+      # registration handles the emulation transparently inside the
+      # container, with no library juggling on the host side.
       run: docker run --privileged --rm tonistiigi/binfmt --install amd64
 
     - name: Cache OHOS NDK
@@ -238,21 +220,48 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ext/ohos/ndk
-        key: ohos-ndk-arm64-${{ hashFiles('ext/ohos/setup-ndk.sh') }}
+        key: ohos-ndk-${{ hashFiles('ext/ohos/setup-ndk.sh') }}
 
-    - name: Setup OHOS NDK
+    - name: Setup OHOS NDK (host-side; only curl/jq/unzip needed)
       if: steps.cache-ndk.outputs.cache-hit != 'true'
       run: sh ext/ohos/setup-ndk.sh --prefix ext/ohos/ndk
 
-    - name: Build OHOS gem (libpng + static zlib + signing)
-      run: bundle exec rake gem:native:aarch64-linux-ohos
-      env:
-        target_platform: aarch64-linux-ohos
+    - name: Build OHOS gem in amd64 container
+      # The entire build (libpng + static zlib + signing) runs inside an
+      # amd64 docker container so the NDK's x86_64 clang + binary-sign-tool
+      # run natively (no qemu at the process level; docker's binfmt handles
+      # the container emulation as a whole).
+      run: |
+        docker run --rm --platform linux/amd64 \
+          -v "$PWD:/work" -w /work \
+          -e target_platform=aarch64-linux-ohos \
+          ruby:3.3 \
+          sh -c '
+            set -e
+            apt-get update
+            apt-get install -y --no-install-recommends cmake ninja-build zlib1g-dev
+            bundle install --jobs 4
+            bundle exec rake gem:native:aarch64-linux-ohos
+            # Confirm the .so was produced and is arm64 ELF (sanity).
+            file lib/libpng/libpng16.so
+          '
 
-    - name: Prepare dockerharmony artifacts
-      run: NDK_ROOT=$PWD/ext/ohos/ndk sh ext/ohos/verify-prepare.sh
+    - name: Prepare dockerharmony artifacts (host-side)
+      # verify-prepare.sh cross-compiles smoke-test.c using the NDK clang.
+      # We run it inside the same amd64 container for the same reason.
+      run: |
+        docker run --rm --platform linux/amd64 \
+          -v "$PWD:/work" -w /work \
+          -e NDK_ROOT=/work/ext/ohos/ndk \
+          ruby:3.3 \
+          sh -c '
+            set -e
+            apt-get update
+            apt-get install -y --no-install-recommends file
+            sh ext/ohos/verify-prepare.sh
+          '
 
-    - name: Verify in dockerharmony (real OHOS userland)
+    - name: Verify in dockerharmony (real OHOS userland, arm64-native)
       run: |
         docker pull ghcr.io/hqzing/dockerharmony:latest
         docker run --rm \
