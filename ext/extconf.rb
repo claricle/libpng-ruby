@@ -1,7 +1,14 @@
-$: << File.expand_path(File.join(File.dirname(__FILE__), '../lib'))
+# frozen_string_literal: true
 
-require 'libpng/recipe'
+# extconf.rb is invoked by RubyGems when installing the source ('ruby'
+# platform) gem. It needs to find lib/libpng.rb on the load path so it
+# can trigger Libpng::Recipe autoload. We don't `require_relative`
+# because that pins to a specific path; instead we extend $LOAD_PATH
+# and let the normal autoload machinery do the work.
+$LOAD_PATH << File.expand_path(File.join(File.dirname(__FILE__), '../lib'))
+
 require 'mkmf'
+require 'libpng' # triggers autoload setup; Libpng::Recipe loads lazily
 
 recipe = Libpng::Recipe.new
 recipe.cook_if_not

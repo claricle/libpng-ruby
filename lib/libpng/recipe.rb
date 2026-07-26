@@ -3,7 +3,6 @@ require 'mini_portile2'
 require 'pathname'
 require 'tmpdir'
 require 'open3'
-require_relative 'version'
 
 module Libpng
   # MiniPortile-based recipe for building libpng from source. Mirrors the

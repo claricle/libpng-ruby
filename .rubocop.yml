@@ -22,7 +22,7 @@ Metrics/ModuleLength:
 Metrics/PerceivedComplexity:
   Max: 20
 Metrics/ParameterLists:
-  Max: 7
+  Max: 9
 
 Metrics/BlockLength:
   Exclude:

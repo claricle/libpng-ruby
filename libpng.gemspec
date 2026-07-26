@@ -32,7 +32,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'ffi', '~> 1.0'
-  spec.add_dependency 'mini_portile2', '~> 2.6'
+  spec.add_dependency 'mini_portile2', '~> 2.8'
 
   spec.extensions = ['ext/extconf.rb']
 end
