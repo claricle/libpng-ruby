@@ -10,6 +10,12 @@ require 'libpng'
 # up once at require time and is shareable across Ractors.
 return unless defined?(Ractor)
 
+# Ruby 4.0 (Dec 2025) removed Ractor#take in favor of Ractor#value.
+# https://www.ruby-lang.org/en/news/2025/12/25/ruby-4-0-0-released/
+def ractor_result(ractor)
+  ractor.respond_to?(:value) ? ractor.value : ractor.take
+end
+
 RSpec.describe Libpng, 'Ractor safety' do
   let(:width) { 4 }
   let(:height) { 2 }
@@ -24,7 +30,7 @@ RSpec.describe Libpng, 'Ractor safety' do
     r = Ractor.new(width, height, rgba) do |w, h, px|
       Libpng.encode(w, h, px, pixel_format: 'RGBA')
     end
-    png = r.take
+    png = ractor_result(r)
     expect(png).to start_with("\x89PNG".b)
     expect(png.bytes[12..15].pack('C*')).to eq('IHDR')
 
@@ -37,7 +43,7 @@ RSpec.describe Libpng, 'Ractor safety' do
     r = Ractor.new(png) do |data|
       Libpng.decode(data, pixel_format: 'RGBA')
     end
-    decoded = r.take
+    decoded = ractor_result(r)
     expect(decoded.width).to eq(width)
     expect(decoded.height).to eq(height)
     expect(decoded.format).to eq('RGBA')
@@ -52,7 +58,7 @@ RSpec.describe Libpng, 'Ractor safety' do
         decoded.pixels == expected
       end
     end
-    expect(ractors.map(&:take)).to all(eq(true))
+    expect(ractors.map { |r| ractor_result(r) }).to all(eq(true))
   end
 
   it 'mixes encode and decode across Ractors' do
@@ -62,7 +68,7 @@ RSpec.describe Libpng, 'Ractor safety' do
     end
     dec_r = Ractor.new(png) { |data| Libpng.decode(data, pixel_format: 'RGBA').pixels }
 
-    expect(enc_r.take).to start_with("\x89PNG".b)
-    expect(dec_r.take).to eq(rgba)
+    expect(ractor_result(enc_r)).to start_with("\x89PNG".b)
+    expect(ractor_result(dec_r)).to eq(rgba)
   end
 end
