@@ -16,11 +16,11 @@ RSpec.describe Libpng::OHOS::NDK do
   end
 
   before do
-    touch_rel('ohos-sdk/linux/build/cmake/ohos.toolchain.cmake')
+    touch_rel('ohos-sdk/linux/native/build/cmake/ohos.toolchain.cmake')
     touch_rel('llvm-19/llvm/bin/aarch64-unknown-linux-ohos-clang')
     touch_rel('llvm-19/llvm/bin/aarch64-unknown-linux-ohos-clang++')
     touch_rel('ohos-sdk/linux/toolchains/lib/binary-sign-tool')
-    touch_rel('ohos-sdk/linux/build-tools/cmake/bin/cmake')
+    touch_rel('ohos-sdk/linux/native/build-tools/cmake/bin/cmake')
     root.join('llvm-19/sysroot/usr/lib/aarch64-linux-ohos').mkpath
   end
 
@@ -32,7 +32,7 @@ RSpec.describe Libpng::OHOS::NDK do
     end
 
     it 'returns false when the toolchain file is missing' do
-      root.join('ohos-sdk/linux/build/cmake/ohos.toolchain.cmake').delete
+      root.join('ohos-sdk/linux/native/build/cmake/ohos.toolchain.cmake').delete
       expect(ndk.exist?).to be(false)
     end
 
@@ -54,7 +54,7 @@ RSpec.describe Libpng::OHOS::NDK do
 
   describe '#toolchain_path' do
     it 'points at ohos.toolchain.cmake under the SDK dir' do
-      expect(ndk.toolchain_path.to_s).to end_with('ohos-sdk/linux/build/cmake/ohos.toolchain.cmake')
+      expect(ndk.toolchain_path.to_s).to end_with('ohos-sdk/linux/native/build/cmake/ohos.toolchain.cmake')
     end
 
     it 'is a Pathname' do
@@ -88,7 +88,7 @@ RSpec.describe Libpng::OHOS::NDK do
 
   describe '#cmake_path' do
     it 'points at the NDK-bundled cmake binary' do
-      expect(ndk.cmake_path.to_s).to end_with('ohos-sdk/linux/build-tools/cmake/bin/cmake')
+      expect(ndk.cmake_path.to_s).to end_with('ohos-sdk/linux/native/build-tools/cmake/bin/cmake')
     end
   end
 

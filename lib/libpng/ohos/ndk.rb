@@ -27,7 +27,7 @@ module Libpng
       end
 
       def toolchain_path
-        sdk_dir.join('build/cmake/ohos.toolchain.cmake')
+        sdk_dir.join('native/build/cmake/ohos.toolchain.cmake')
       end
 
       def clang_path
@@ -47,7 +47,7 @@ module Libpng
       end
 
       def cmake_path
-        sdk_dir.join('build-tools/cmake/bin/cmake')
+        sdk_dir.join('native/build-tools/cmake/bin/cmake')
       end
 
       attr_reader :root

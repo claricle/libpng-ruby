@@ -65,7 +65,11 @@ tar -zxf "$TMP/ohos-sdk-public.tar.gz" -C "$PREFIX"
 # Drop non-linux variants to keep the cache small.
 rm -rf "$PREFIX/ohos-sdk/windows" "$PREFIX/ohos-sdk/ohos" 2>/dev/null || true
 cd "$PREFIX/ohos-sdk/linux"
-for z in toolchains-*.zip; do
+# The SDK ships multiple zips: toolchains-*.zip (binary-sign-tool etc.)
+# and native-*.zip (ohos.toolchain.cmake, build-tools/cmake). Unzip them
+# all so the NDK class can find both toolchains/lib/binary-sign-tool and
+# native/build/cmake/ohos.toolchain.cmake.
+for z in *.zip; do
   [ -e "$z" ] || continue
   unzip -q "$z"
   rm -f "$z"
@@ -92,6 +96,8 @@ cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
 echo "setup-ndk: locating critical files..."
-find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' \) -print | head -20
-echo "setup-ndk: top-level dir listing:"
-ls "$PREFIX"
+find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name '*.cmake' \) -print | head -30
+echo "setup-ndk: ohos-sdk/linux/ listing:"
+ls "$PREFIX/ohos-sdk/linux" 2>&1 || true
+echo "setup-ndk: any 'native' dir?"
+find "$PREFIX/ohos-sdk" -type d -name native 2>&1 | head -5

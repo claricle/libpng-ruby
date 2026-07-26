@@ -11,7 +11,7 @@ RSpec.describe Libpng::OHOS::ZlibBuilder do
 
   before do
     %w[
-      ohos-sdk/linux/build/cmake/ohos.toolchain.cmake
+      ohos-sdk/linux/native/build/cmake/ohos.toolchain.cmake
       llvm-19/llvm/bin/aarch64-unknown-linux-ohos-clang
       ohos-sdk/linux/toolchains/lib/binary-sign-tool
     ].each do |rel|
