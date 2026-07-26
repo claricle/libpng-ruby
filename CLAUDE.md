@@ -29,8 +29,16 @@ loaded via `autoload` from `lib/libpng.rb`. **Never use `require_relative`
 | `lib/libpng/standard_decoder.rb` | `Libpng::StandardDecoder` (libpng standard read API; explicit transform control) |
 | `lib/libpng/metadata_writer.rb` | `Libpng::MetadataWriter` (validates + writes text/gAMA/sRGB/cHRM/iCCP/pHYs onto a png_ptr/info_ptr pair) |
 | `lib/libpng/text_writer.rb` | `Libpng::TextWriter` + `Libpng::TextEntry` (builds png_text struct array, calls `png_set_text`) |
-| `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem) |
-| `ext/extconf.rb` | Gem extension entry. Triggers `Libpng::Recipe` autoload via `require 'libpng'`, then emits a dummy Makefile |
+| `lib/libpng/recipe.rb` | `Libpng::Recipe < MiniPortileCMake` (builds libpng from source for the source gem). Has `.for_target(platform)` factory -- OCP seam that returns `OHOS::Recipe` for `*-ohos`, base `Recipe` otherwise |
+| `lib/libpng/ohos.rb` | `Libpng::OHOS` namespace + autoloads. Lazy-loaded only when `Recipe.for_target` is called with an OHOS target |
+| `lib/libpng/ohos/ndk.rb` | `OHOS::NDK` -- pure-data class for NDK path discovery (toolchain/sysroot/clang/sign-tool). Idempotent `#download` via `setup-ndk.sh` |
+| `lib/libpng/ohos/zlib_builder.rb` | `OHOS::ZlibBuilder < MiniPortileCMake` -- builds `libz.a` statically with the OHOS toolchain |
+| `lib/libpng/ohos/code_signer.rb` | `OHOS::CodeSigner` -- wraps `binary-sign-tool sign -selfSign 1`. Pure-data `#sign_command` is testable without invoking the tool |
+| `lib/libpng/ohos/recipe.rb` | `OHOS::Recipe < Libpng::Recipe` -- orchestrates NDK setup, zlib build, libpng cross-compile with `ohos.toolchain.cmake`, and post-install signing |
+| `ext/extconf.rb` | Gem extension entry. Calls `Libpng::Recipe.for_target(ENV['target_platform']).new`, then emits a dummy Makefile |
+| `ext/ohos/setup-ndk.sh` | Downloads OHOS SDK + LLVM-19 via OpenHarmony daily_build API (adapted from ohos-node/build.sh). Idempotent |
+| `ext/ohos/smoke-test.c` | Minimal libpng round-trip test, cross-compiled with NDK clang and run inside dockerharmony |
+| `ext/ohos/verify-prepare.sh` | Cross-compiles smoke-test, bundles signed `.so` + SONAME symlinks for dockerharmony |
 
 ### Public API
 
@@ -73,6 +81,25 @@ bundle exec rake gem:native:any             # source gem (compiles on install)
 ```
 
 Platform gem tasks: `x64-mingw32`, `x64-mingw-ucrt`, `aarch64-mingw-ucrt`, `x86_64-linux`, `x86_64-linux-musl`, `aarch64-linux`, `aarch64-linux-musl`, `aarch64-linux-ohos`, `x86_64-darwin`, `arm64-darwin`.
+
+### OHOS (`aarch64-linux-ohos`) build notes
+
+OHOS uses a dedicated `build_ohos` CI job (see `.github/workflows/build.yml`)
+that runs on `ubuntu-24.04-arm`. The NDK's clang and `binary-sign-tool` are
+x86_64 ELF and run via `binfmt_misc` + `qemu-user-static`. The job:
+
+1. Downloads OHOS SDK + LLVM-19 via `ext/ohos/setup-ndk.sh` (~1.5 GB, cached
+   across runs by `actions/cache@v4`).
+2. Runs `rake gem:native:aarch64-linux-ohos`, which delegates to
+   `Libpng::OHOS::Recipe` (sets up NDK, builds static zlib, cross-compiles
+   libpng with `ohos.toolchain.cmake`, signs the `.so`).
+3. Cross-compiles `ext/ohos/smoke-test.c` with NDK clang via
+   `verify-prepare.sh`, then runs it inside the `dockerharmony` container
+   (real OHOS userland) — build fails if smoke-test doesn't output `OK`.
+
+Local dev: `target_platform=aarch64-linux-ohos bundle exec rake compile`
+will only succeed on an arm64 host with `qemu-user-static` registered,
+because the NDK clang is x86_64 ELF. CI handles this automatically.
 
 ## Release process
 

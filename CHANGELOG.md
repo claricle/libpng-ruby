@@ -7,6 +7,56 @@ This gem follows a `{LIBPNG_VERSION}.{LIBPNG_RUBY_ITERATION}` version
 scheme. `LIBPNG_VERSION` is the upstream libpng release; `ITERATION`
 bumps for Ruby-side changes and resets to 0 when LIBPNG_VERSION bumps.
 
+## [1.6.58.6] - 2026-07-26
+
+### Changed
+- **OHOS (`aarch64-linux-ohos`) is now cross-compiled with the official OHOS
+  NDK** (Huawei's `ohos.toolchain.cmake` + LLVM-19 clang), replacing the
+  1.6.58.4/.5 approach of shipping Alpine-built musl bytes labeled as OHOS.
+
+  The build runs on `ubuntu-24.04-arm`. The OHOS NDK clang is an x86_64
+  binary and runs transparently via `binfmt_misc` + `qemu-user-static`.
+  zlib is built statically with the same toolchain and linked into
+  `libpng16.so` (avoids the OHOS non-standard zlib SONAME
+  `libshared_libz.z.so`). The freshly built `.so` is code-signed with
+  `binary-sign-tool sign -selfSign 1` (mandatory for runtime loading on
+  production OHOS devices).
+
+  Verification: the signed `.so` is loaded by a smoke-test binary inside
+  real OHOS userland (the `dockerharmony` container running natively on
+  the same arm64 host -- no qemu). Build fails if the smoke test fails.
+
+### Added
+- `lib/libpng/ohos.rb`, `lib/libpng/ohos/{ndk,zlib_builder,code_signer,recipe}.rb`
+  -- OHOS cross-compile support. Lazy-loaded only when building for OHOS.
+  - `Libpng::OHOS::NDK` -- pure-data class for NDK path discovery.
+  - `Libpng::OHOS::ZlibBuilder < MiniPortileCMake` -- static zlib build.
+  - `Libpng::OHOS::CodeSigner` -- wraps `binary-sign-tool`.
+  - `Libpng::OHOS::Recipe < Libpng::Recipe` -- orchestrates the OHOS build.
+- `lib/libpng/recipe.rb`: `Recipe.for_target(platform)` factory -- OCP seam
+  that returns `OHOS::Recipe` for `*-ohos` targets, base `Recipe` otherwise.
+- `ext/ohos/setup-ndk.sh` -- downloads OHOS SDK + LLVM-19 via daily_build API
+  (adapted from ohos-node's `build.sh`).
+- `ext/ohos/smoke-test.c` -- minimal libpng round-trip test for dockerharmony.
+- `ext/ohos/verify-prepare.sh` -- cross-compiles smoke-test with NDK clang,
+  bundles signed `.so` + SONAME symlinks (fixes PR #12's symlink bug).
+- 49 new specs under `spec/ohos/` + `spec/recipe_factory_spec.rb`.
+
+### Caveats
+- The 1.6.58.4/.5 OHOS gems shipped Alpine-built bytes without NDK
+  verification. This version is the first with proper OHOS NDK
+  cross-compilation + signing.
+- Code signing uses `-selfSign 1` (self-signed). Sufficient for OHOS
+  userland load. Production deployment on Huawei-managed hardware may
+  require re-signing with an enrolled cert.
+
+### Superseded
+- PR #11 (closed) -- hand-written `toolchain.cmake` + system CMake. Replaced
+  by NDK's bundled `ohos.toolchain.cmake`.
+- PR #12 (closed) -- dockerharmony verification of Alpine bytes. The
+  verification step is reused here; the Alpine-built `.so` is replaced
+  with the NDK-built, signed one.
+
 ## [1.6.58.5] - 2026-07-26
 
 ### Added
