@@ -46,6 +46,12 @@ module Libpng
   # is invoked during `gem install` of the source ('ruby' platform) gem.
   autoload :Recipe, 'libpng/recipe'
 
+  # OHOS cross-compile support. Lazy-loaded only when
+  # Libpng::Recipe.for_target is called with an OHOS target. Contains
+  # the OHOS::NDK path manager, OHOS::ZlibBuilder, OHOS::CodeSigner, and
+  # OHOS::Recipe < Libpng::Recipe.
+  autoload :OHOS, 'libpng/ohos'
+
   # ------------------------------------------------------------------
   # PNG_IMAGE_FORMAT_* bit flags (png.h). Used by the simplified API.
   # ------------------------------------------------------------------

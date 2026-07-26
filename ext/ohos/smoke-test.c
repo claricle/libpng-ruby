@@ -1,14 +1,14 @@
 /* Minimal libpng round-trip test, run inside the dockerharmony
- * container (real OHOS userland) to verify that an Alpine-built
+ * container (real OHOS userland) to verify that an NDK-built, signed
  * libpng16.so actually loads and works on OHOS.
  *
- * The binary itself is also built under Alpine (aarch64-linux-musl),
- * then copied into dockerharmony along with the .so. Both run via
- * the OHOS dynamic linker (/lib/ld-musl-aarch64.so.1).
+ * The binary itself is cross-compiled with the OHOS NDK clang
+ * (aarch64-unknown-linux-ohos target). Both the binary and the .so
+ * run via the OHOS dynamic linker (/lib/ld-musl-aarch64.so.1).
  *
- * This is the empirical check that "Alpine-built musl arm64 bytes
- * work in real OHOS userland" -- not just an assumption based on
- * matching dynamic-linker paths.
+ * This is the empirical check that "NDK-built OHOS bytes work in
+ * real OHOS userland" -- not just an assumption based on matching
+ * dynamic-linker paths.
  */
 #include <png.h>
 #include <stdio.h>

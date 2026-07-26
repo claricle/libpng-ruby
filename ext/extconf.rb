@@ -10,7 +10,7 @@ $LOAD_PATH << File.expand_path(File.join(File.dirname(__FILE__), '../lib'))
 require 'mkmf'
 require 'libpng' # triggers autoload setup; Libpng::Recipe loads lazily
 
-recipe = Libpng::Recipe.new
+recipe = Libpng::Recipe.for_target(ENV.fetch('target_platform', nil)).new
 recipe.cook_if_not
 
 # RubyGems requires every extconf.rb to leave a Makefile behind, even if

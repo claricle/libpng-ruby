@@ -12,6 +12,25 @@ module Libpng
   # directory. The pre-compiled gems (built via `rake gem:native:<plat>`)
   # ship the .so/.dylib/.dll and disable extconf.rb entirely.
   class Recipe < MiniPortileCMake
+    class << self
+      # Factory: returns the recipe subclass appropriate for the target
+      # platform. Currently only OHOS has a subclass; everything else
+      # uses the base Recipe. Adding a new cross-compile platform = adding
+      # a new Libpng::<Platform>::Recipe subclass + a case branch here.
+      # OCP-compliant: existing recipe logic is unchanged.
+      def for_target(platform)
+        return Recipe unless ohos_target?(platform)
+
+        Libpng::OHOS::Recipe
+      end
+
+      def ohos_target?(platform)
+        return false unless platform.is_a?(String)
+
+        platform.end_with?('-ohos')
+      end
+    end
+
     # Pinned libpng source URL + sha256. Bump deliberately to refresh
     # the upstream — and remember to update both fields together.
     LIBPNG_URL = "https://downloads.sourceforge.net/project/libpng/libpng16/#{Libpng::LIBPNG_VERSION}/libpng-#{Libpng::LIBPNG_VERSION}.tar.gz".freeze
