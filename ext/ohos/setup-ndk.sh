@@ -104,24 +104,20 @@ rm -rf ohos-sysroot.tar.gz
 cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
-echo "setup-ndk: llvm-19/ top-level contents:"
-ls "$PREFIX/llvm-19" 2>&1
-echo "setup-ndk: llvm-19/ tree (2 levels):"
-find "$PREFIX/llvm-19" -maxdepth 2 -type d 2>&1 | head -20
-echo "setup-ndk: any 'bits' or 'alltypes.h' anywhere?"
-find "$PREFIX" -name 'alltypes.h' -o -type d -name 'bits' 2>&1 | head -10
-echo "setup-ndk: ohos-sysroot.tar.gz contents (top-level):"
-tar -tzf "$TMP/LLVM-19.tar.gz" 2>&1 | grep -i sysroot | head -5
-# The SDK bundles a partial sysroot at ohos-sdk/linux/native/sysroot/
-# (missing arch-specific musl headers like bits/alltypes.h). The LLVM-19
-# tarball ships a more complete sysroot. Replace the SDK's partial sysroot
-# with a symlink to the LLVM-19 one so ohos.toolchain.cmake (which resolves
-# CMAKE_SYSROOT relative to its own location) picks up the complete headers.
-if [ -d "$PREFIX/llvm-19/sysroot/usr/include" ] && [ -d "$PREFIX/ohos-sdk/linux/native/sysroot" ]; then
+# The OHOS toolchain (ohos.toolchain.cmake) resolves CMAKE_SYSROOT relative
+# to its own location: ohos-sdk/linux/native/sysroot/. That sysroot uses the
+# MULTIARCH layout (usr/include/aarch64-linux-ohos/bits/...), but the
+# toolchain expects the PER-ARCH layout (sysroot/usr/include/bits/...).
+#
+# The LLVM-19 tarball ships per-arch sysroots at llvm-19/sysroot/<arch>/.
+# Symlink the SDK's multiarch sysroot to the per-arch aarch64 sysroot so
+# the toolchain finds bits/alltypes.h and friends at the expected paths.
+ARCH_SYSROOT="$PREFIX/llvm-19/sysroot/aarch64-linux-ohos"
+if [ -d "$ARCH_SYSROOT/usr/include" ] && [ -d "$PREFIX/ohos-sdk/linux/native/sysroot" ]; then
   rm -rf "$PREFIX/ohos-sdk/linux/native/sysroot"
-  ln -s "$PREFIX/llvm-19/sysroot" "$PREFIX/ohos-sdk/linux/native/sysroot"
+  ln -s "$ARCH_SYSROOT" "$PREFIX/ohos-sdk/linux/native/sysroot"
 else
-  echo "setup-ndk: WARNING - cannot find LLVM-19 sysroot; SDK sysroot will be incomplete"
+  echo "setup-ndk: WARNING - $ARCH_SYSROOT missing; SDK sysroot will be incomplete"
 fi
 echo "setup-ndk: locating critical files..."
-find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name 'alltypes.h' \) -print | head -30
+find "$PREFIX" -maxdepth 9 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name 'alltypes.h' \) -print | head -20
