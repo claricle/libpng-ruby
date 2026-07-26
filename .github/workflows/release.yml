@@ -245,21 +245,12 @@ jobs:
         with:
           ref: ${{ needs.bump.outputs.sha || github.ref }}
 
-      - uses: ruby/setup-ruby@master
-        with:
-          ruby-version: '3.3'
-          bundler-cache: true
-
-      - name: Install build tools + x86_64 multiarch userland (for NDK clang under qemu)
+      - name: Install host-side tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build zlib1g-dev curl jq unzip
-          sudo dpkg --add-architecture amd64
-          sudo apt-get update
-          sudo apt-get install -y libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64
+          sudo apt-get install -y curl jq unzip file
 
-      - name: Register binfmt for x86_64 with fix-binary flag
-        # See build.yml's build_ohos job for full notes.
+      - name: Register binfmt for amd64 docker emulation
         run: docker run --privileged --rm tonistiigi/binfmt --install amd64
 
       - name: Cache OHOS NDK
@@ -267,19 +258,39 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ext/ohos/ndk
-          key: ohos-ndk-arm64-${{ hashFiles('ext/ohos/setup-ndk.sh') }}
+          key: ohos-ndk-${{ hashFiles('ext/ohos/setup-ndk.sh') }}
 
       - name: Setup OHOS NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: sh ext/ohos/setup-ndk.sh --prefix ext/ohos/ndk
 
-      - name: Build OHOS gem (libpng + static zlib + signing)
-        run: bundle exec rake gem:native:aarch64-linux-ohos
-        env:
-          target_platform: aarch64-linux-ohos
+      - name: Build OHOS gem in amd64 container
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/work" -w /work \
+            -e target_platform=aarch64-linux-ohos \
+            ruby:3.3 \
+            sh -c '
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends cmake ninja-build zlib1g-dev
+              bundle install --jobs 4
+              bundle exec rake gem:native:aarch64-linux-ohos
+              file lib/libpng/libpng16.so
+            '
 
       - name: Prepare dockerharmony artifacts
-        run: NDK_ROOT=$PWD/ext/ohos/ndk sh ext/ohos/verify-prepare.sh
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/work" -w /work \
+            -e NDK_ROOT=/work/ext/ohos/ndk \
+            ruby:3.3 \
+            sh -c '
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends file
+              sh ext/ohos/verify-prepare.sh
+            '
 
       - name: Verify in dockerharmony (real OHOS userland)
         run: |
