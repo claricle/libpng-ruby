@@ -118,10 +118,17 @@ echo "setup-ndk: NDK ready at $PREFIX"
 # The LLVM-19 tarball ships per-arch sysroots at llvm-19/sysroot/<arch>/.
 # Symlink the SDK's multiarch sysroot to the per-arch aarch64 sysroot so
 # the toolchain finds bits/alltypes.h and friends at the expected paths.
+#
+# IMPORTANT: use a RELATIVE symlink target. The build itself runs inside
+# a docker container that mounts $PREFIX at a different absolute path
+# (/work/...) than the host (/home/runner/...). An absolute target would
+# dangle inside the container; a relative target resolves correctly in
+# both contexts.
 ARCH_SYSROOT="$PREFIX/llvm-19/sysroot/aarch64-linux-ohos"
-if [ -d "$ARCH_SYSROOT/usr/include" ] && [ -d "$PREFIX/ohos-sdk/linux/native/sysroot" ]; then
-  rm -rf "$PREFIX/ohos-sdk/linux/native/sysroot"
-  ln -s "$ARCH_SYSROOT" "$PREFIX/ohos-sdk/linux/native/sysroot"
+NATIVE_DIR="$PREFIX/ohos-sdk/linux/native"
+if [ -d "$ARCH_SYSROOT/usr/include" ] && [ -d "$NATIVE_DIR/sysroot" ]; then
+  rm -rf "$NATIVE_DIR/sysroot"
+  ln -s "../../../llvm-19/sysroot/aarch64-linux-ohos" "$NATIVE_DIR/sysroot"
 else
   echo "setup-ndk: WARNING - $ARCH_SYSROOT missing; SDK sysroot will be incomplete"
 fi
