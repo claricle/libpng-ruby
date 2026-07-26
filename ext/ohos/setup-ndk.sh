@@ -46,17 +46,23 @@ trap 'rm -rf "$TMP"' EXIT
 
 query_component() {
   component=$1
-  curl -fsSL 'https://dcp.openharmony.cn/api/daily_build/build/list/component' \
+  curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+    'https://dcp.openharmony.cn/api/daily_build/build/list/component' \
     -H 'Accept: application/json, text/plain, */*' \
     -H 'Content-Type: application/json' \
     --data-raw '{"projectName":"openharmony","branch":"master","pageNum":1,"pageSize":10,"deviceLevel":"","component":"'"${component}"'","type":1,"startTime":"2025080100000000","endTime":"20990101235959","sortType":"","sortField":"","hardwareBoard":"","buildStatus":"success","buildFailReason":"","withDomain":1}'
+}
+
+# Curl download helper with retries (the OHOS CDN sometimes resets connections).
+dl() {
+  curl --retry 5 --retry-delay 10 --retry-all-errors -fL "$1" -o "$2"
 }
 
 echo "setup-ndk: querying daily_build API for ohos-sdk-public..."
 sdk_url=$(query_component "ohos-sdk-public" | jq -r '.data.list.dataList[0].obsPath')
 [ -n "$sdk_url" ] || { echo "setup-ndk: failed to resolve sdk URL" >&2; exit 1; }
 echo "setup-ndk: downloading $sdk_url"
-curl -fL "$sdk_url" -o "$TMP/ohos-sdk-public.tar.gz"
+dl "$sdk_url" "$TMP/ohos-sdk-public.tar.gz"
 # The SDK tarball already contains ohos-sdk/{linux,windows,ohos}/ at the
 # top level. Extract straight into $PREFIX so $PREFIX/ohos-sdk/linux/ ends
 # up at the expected path (extracting into $PREFIX/ohos-sdk would create
@@ -80,7 +86,7 @@ echo "setup-ndk: querying daily_build API for LLVM-19..."
 llvm_url=$(query_component "LLVM-19" | jq -r '.data.list.dataList[0].obsPath')
 [ -n "$llvm_url" ] || { echo "setup-ndk: failed to resolve LLVM-19 URL" >&2; exit 1; }
 echo "setup-ndk: downloading $llvm_url"
-curl -fL "$llvm_url" -o "$TMP/LLVM-19.tar.gz"
+dl "$llvm_url" "$TMP/LLVM-19.tar.gz"
 # LLVM-19 tarball extracts to ./llvm-linux-x86_64.tar.gz + ./ohos-sysroot.tar.gz
 # at the top level. Extract straight into $PREFIX/llvm-19/ so the inner
 # tarballs land where the next step expects them.
