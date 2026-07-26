@@ -104,6 +104,14 @@ rm -rf ohos-sysroot.tar.gz
 cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
+echo "setup-ndk: llvm-19/ top-level contents:"
+ls "$PREFIX/llvm-19" 2>&1
+echo "setup-ndk: llvm-19/ tree (2 levels):"
+find "$PREFIX/llvm-19" -maxdepth 2 -type d 2>&1 | head -20
+echo "setup-ndk: any 'bits' or 'alltypes.h' anywhere?"
+find "$PREFIX" -name 'alltypes.h' -o -type d -name 'bits' 2>&1 | head -10
+echo "setup-ndk: ohos-sysroot.tar.gz contents (top-level):"
+tar -tzf "$TMP/LLVM-19.tar.gz" 2>&1 | grep -i sysroot | head -5
 # The SDK bundles a partial sysroot at ohos-sdk/linux/native/sysroot/
 # (missing arch-specific musl headers like bits/alltypes.h). The LLVM-19
 # tarball ships a more complete sysroot. Replace the SDK's partial sysroot
@@ -112,10 +120,8 @@ echo "setup-ndk: NDK ready at $PREFIX"
 if [ -d "$PREFIX/llvm-19/sysroot/usr/include" ] && [ -d "$PREFIX/ohos-sdk/linux/native/sysroot" ]; then
   rm -rf "$PREFIX/ohos-sdk/linux/native/sysroot"
   ln -s "$PREFIX/llvm-19/sysroot" "$PREFIX/ohos-sdk/linux/native/sysroot"
+else
+  echo "setup-ndk: WARNING - cannot find LLVM-19 sysroot; SDK sysroot will be incomplete"
 fi
 echo "setup-ndk: locating critical files..."
 find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' -o -name 'alltypes.h' \) -print | head -30
-echo "setup-ndk: ohos-sdk/linux/ listing:"
-ls "$PREFIX/ohos-sdk/linux" 2>&1 || true
-echo "setup-ndk: llvm-19/sysroot/usr/include/ listing:"
-ls "$PREFIX/llvm-19/sysroot/usr/include" 2>&1 | head -20 || true
