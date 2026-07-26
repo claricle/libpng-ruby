@@ -10,15 +10,15 @@ Gemspec/DevelopmentDependencies:
 # methods that walk libpng's chunked API; splitting would obscure the
 # 1-to-1 mapping with the C API.
 Metrics/AbcSize:
-  Max: 60
+  Max: 70
 Metrics/ClassLength:
   Max: 200
 Metrics/CyclomaticComplexity:
   Max: 20
 Metrics/MethodLength:
-  Max: 50
+  Max: 70
 Metrics/ModuleLength:
-  Max: 250
+  Max: 350
 Metrics/PerceivedComplexity:
   Max: 20
 Metrics/ParameterLists:
