@@ -91,3 +91,7 @@ rm -rf ohos-sysroot.tar.gz
 cd -
 
 echo "setup-ndk: NDK ready at $PREFIX"
+echo "setup-ndk: locating critical files..."
+find "$PREFIX" -maxdepth 8 \( -name 'ohos.toolchain.cmake' -o -name 'binary-sign-tool' -o -name 'aarch64-unknown-linux-ohos-clang' \) -print | head -20
+echo "setup-ndk: top-level dir listing:"
+ls "$PREFIX"
